@@ -1,0 +1,10 @@
+<section id="trust-me-review-widget" class="tmr-widget" data-tmr-widget data-product-id="{{ product.id }}" data-shop="{{ shop.permanent_domain }}" data-api="{{ block.settings.api_origin }}" data-locale="{{ request.locale.iso_code | default: 'en' }}">
+  <h2>{{ block.settings.heading }}</h2><div class="tmr-summary"></div><div class="tmr-list"></div><button type="button" class="tmr-write">Write a review</button>
+  <dialog class="tmr-dialog"><form class="tmr-form" method="dialog"><button class="tmr-close" aria-label="Close" type="button">×</button><label>Rating <select name="rating"><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label><label>Name <input required name="authorName" maxlength="120"/></label><label>Title <input name="title" maxlength="120"/></label><label>Review <textarea required name="body" minlength="10" maxlength="3000"></textarea></label><input class="tmr-honeypot" name="website" tabindex="-1" autocomplete="off"/><div class="cf-turnstile" data-sitekey="{{ block.settings.turnstile_site_key }}"></div><button type="submit">Submit review</button></form></dialog>
+</section>
+{{ 'trust-me-review.css' | asset_url | stylesheet_tag }}
+{{ 'trust-me-review.js' | asset_url | script_tag }}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% schema %}
+{"name":"Trust Me Review widget","target":"section","settings":[{"type":"text","id":"heading","label":"Heading","default":"Customer reviews"},{"type":"text","id":"api_origin","label":"App API origin"},{"type":"text","id":"turnstile_site_key","label":"Turnstile site key"}]}
+{% endschema %}

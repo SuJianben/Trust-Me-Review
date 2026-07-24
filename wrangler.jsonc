@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trust-me-review",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application" },
+  "placement": { "mode": "smart" },
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "queues": {
+    "producers": [{ "binding": "REVIEW_QUEUE", "queue": "trust-me-review-jobs" }],
+    "consumers": [{ "queue": "trust-me-review-jobs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "trust-me-review-dead-letter" }]
+  },
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  "vars": {
+    "APP_URL": "https://REPLACE_WITH_WORKER_DOMAIN",
+    "SHOPIFY_API_VERSION": "2026-07",
+    "DEFAULT_LOCALE": "en"
+  }
+}
