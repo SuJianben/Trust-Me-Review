@@ -10,7 +10,9 @@
 
 ## 自检
 
-- 待执行依赖安装、类型检查、单元测试和 Worker 构建。
+- 已完成 TypeScript 类型检查、5 个单元测试和 Cloudflare Worker 干跑构建。
+- 已创建并确认 Cloudflare Worker、主队列、死信队列、Turnstile 与 Hyperdrive。
+- Hyperdrive 绑定已更新为实际配置 `trust-me-review-db`；数据库密码未进入仓库。
 
 ## 遗留
 

@@ -11,9 +11,9 @@
     "producers": [{ "binding": "REVIEW_QUEUE", "queue": "trust-me-review-jobs" }],
     "consumers": [{ "queue": "trust-me-review-jobs", "max_batch_size": 10, "max_retries": 5, "dead_letter_queue": "trust-me-review-dead-letter" }]
   },
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "177e898be92640b78cd49462f9412f60" }],
   "vars": {
-    "APP_URL": "https://REPLACE_WITH_WORKER_DOMAIN",
+    "APP_URL": "https://trust-me-review.guage5751.workers.dev",
     "SHOPIFY_API_VERSION": "2026-07",
     "DEFAULT_LOCALE": "en"
   }
