@@ -94,7 +94,22 @@ app.get("/api/admin/reviews", async (ctx) => {
 });
 app.patch("/api/admin/reviews/:id", async (ctx) => {
   const admin = ctx.get("admin")!; const input = moderationSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
-  const updated = await withDb(ctx.env, async (db) => { const row = await db.query<{ id:string; shop_id:string }>(`update reviews r set status=$1,pinned=coalesce($2,pinned),published_at=case when $1='published' and published_at is null then now() else published_at end,deleted_at=case when $1='deleted' then now() else null end,updated_at=now() from shops s where r.shop_id=s.id and s.domain=$3 and r.id=$4 returning r.id,r.shop_id`, [input.data.status,input.data.pinned ?? null,admin.shopDomain,ctx.req.param("id")]); if (row.rowCount) await audit(db,row.rows[0].shop_id,`review_${input.data.status}`,"review",row.rows[0].id,admin.userId,{ pinned: input.data.pinned }); return row.rows[0]; });
+  const updated = await withDb(ctx.env, async (db) => {
+    const row = await db.query<{ id: string; shop_id: string }>(`
+      update reviews r
+      set status = $1::review_status,
+          pinned = coalesce($2, pinned),
+          published_at = case when $1::review_status = 'published'::review_status and published_at is null then now() else published_at end,
+          deleted_at = case when $1::review_status = 'deleted'::review_status then now() else null end,
+          updated_at = now()
+      from shops s
+      where r.shop_id = s.id and s.domain = $3 and r.id = $4
+      returning r.id, r.shop_id`,
+      [input.data.status, input.data.pinned ?? null, admin.shopDomain, ctx.req.param("id")],
+    );
+    if (row.rowCount) await audit(db, row.rows[0].shop_id, `review_${input.data.status}`, "review", row.rows[0].id, admin.userId, { pinned: input.data.pinned });
+    return row.rows[0];
+  });
   return updated ? ctx.json(updated) : ctx.json({ error: "Review not found" }, 404);
 });
 app.post("/api/admin/reviews/:id/reply", async (ctx) => {

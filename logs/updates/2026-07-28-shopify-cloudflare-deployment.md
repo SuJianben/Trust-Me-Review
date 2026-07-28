@@ -60,3 +60,9 @@
 - 新增 `src/features/shops/service.ts`：首次经过签名校验的后台 API 请求，会用 session token 交换离线访问令牌，再原子写入 `shops` 与默认 `shop_settings`。
 - `src/lib/auth.ts`：在完成 JWT 验签后保留原 session token，专供服务端 token exchange 使用，不写入前台或日志。
 - `src/worker.ts`：后台 API 中间件在认证后确保店铺连接已建立；根路径不再触发旧 OAuth 重定向。
+
+## 评论审核发布修复
+
+- 公开评论主链路已完成开发店验证：公开提交成功后正确进入 `pending` 审核队列。
+- 修复审核 SQL 的 `review_status` 参数类型冲突；该错误只阻止审核操作，不会改变已有评论数据。
+- 新增独立 BUG 记录：`logs/bugs/2026-07-28-review-moderation-status-type.md`。
