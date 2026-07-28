@@ -5,25 +5,27 @@ import type { Env, QueueJob, ReviewStatus } from "./types";
 import { withDb, audit } from "./services/db";
 import { validWebhook, verifyTurnstile } from "./services/shopify";
 import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/auth";
+import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, reservePublicSubmission } from "./features/reviews/service";
 import { createRequest, createTestDelivery, queueDueRequests } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
 
-const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string } } }>();
+const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
 app.onError((error, ctx) => {
   console.error("request_failed", { method: ctx.req.method, path: new URL(ctx.req.url).pathname, error: error instanceof Error ? error.message : String(error) });
   return ctx.json({ error: "Internal server error" }, 500);
 });
 app.use("/api/storefront/*", cors({ origin: "*", allowMethods: ["GET", "POST"] }));
-app.use("/api/admin/*", async (ctx, next) => { const admin = await verifyAdminSession(ctx.req.raw, ctx.env); if (!admin) return ctx.json({ error: "Unauthorized" }, 401); ctx.set("admin", admin); await next(); });
+app.use("/api/admin/*", async (ctx, next) => {
+  const admin = await verifyAdminSession(ctx.req.raw, ctx.env);
+  if (!admin) return ctx.json({ error: "Unauthorized" }, 401);
+  await ensureManagedShop(ctx.env, admin);
+  ctx.set("admin", admin);
+  await next();
+});
 app.get("/health", (ctx) => ctx.json({ ok: true, service: "trust-me-review" }));
 app.get("/", async (ctx) => {
-  const shop = ctx.req.query("shop")?.toLowerCase();
-  if (shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
-    const existing = await withDb(ctx.env, (db) => db.query("select 1 from shops where domain=$1 and status='active'", [shop]));
-    if (!existing.rowCount) return ctx.redirect(`/auth?shop=${encodeURIComponent(shop)}`);
-  }
   const asset = await ctx.env.ASSETS.fetch(ctx.req.raw);
   const html = (await asset.text()).replace("REPLACE_WITH_SHOPIFY_API_KEY", ctx.env.SHOPIFY_API_KEY);
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });

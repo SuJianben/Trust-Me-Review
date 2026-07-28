@@ -53,3 +53,10 @@
 
 - 问题：OAuth 回调使用相对地址回跳；在 Shopify 嵌入式后台中会被解释为后台内部路径，导致 404。
 - `src/worker.ts`：回调成功后改为跳转到该店铺的 Shopify 应用入口，并记录不含敏感信息的授权完成日志。
+
+## Managed Install 根因修复
+
+- 根因：应用已启用 Shopify Managed Install，但首次店铺记录依赖了旧式授权码回跳；Shopify 当前要求嵌入式应用使用 session token exchange 获取访问令牌。
+- 新增 `src/features/shops/service.ts`：首次经过签名校验的后台 API 请求，会用 session token 交换离线访问令牌，再原子写入 `shops` 与默认 `shop_settings`。
+- `src/lib/auth.ts`：在完成 JWT 验签后保留原 session token，专供服务端 token exchange 使用，不写入前台或日志。
+- `src/worker.ts`：后台 API 中间件在认证后确保店铺连接已建立；根路径不再触发旧 OAuth 重定向。
