@@ -1,0 +1,21 @@
+client_id = "bbe55280b170166787a4fdd8513ec79f"
+name = "Trust Me Review"
+application_url = "https://trust-me-review.guage5751.workers.dev"
+embedded = true
+
+[auth]
+redirect_urls = ["https://trust-me-review.guage5751.workers.dev/auth/callback"]
+
+[access_scopes]
+scopes = "read_products,read_orders"
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+topics = ["orders/fulfilled", "app/uninstalled"]
+uri = "/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "/webhooks/shopify"

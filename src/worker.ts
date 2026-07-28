@@ -18,7 +18,7 @@ app.get("/", async (ctx) => { const asset=await ctx.env.ASSETS.fetch(ctx.req.raw
 
 app.get("/auth", async (ctx) => {
   const shop = ctx.req.query("shop")?.toLowerCase(); if (!shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return ctx.text("Invalid shop", 400);
-  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders,read_fulfillments", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
+  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
   return ctx.redirect(`https://${shop}/admin/oauth/authorize?${params}`);
 });
 app.get("/auth/callback", async (ctx) => {

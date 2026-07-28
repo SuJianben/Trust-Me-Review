@@ -12,7 +12,6 @@ export interface Env {
   SHOPIFY_API_SECRET: string;
   SHOPIFY_API_VERSION: string;
   TURNSTILE_SECRET: string;
-  TURNSTILE_SITE_KEY: string;
   TOKEN_SECRET: string;
   DEFAULT_LOCALE: Locale;
 }

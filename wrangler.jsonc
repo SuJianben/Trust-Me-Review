@@ -5,6 +5,7 @@
   "compatibility_date": "2026-07-24",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application" },
+  "observability": { "enabled": true, "logs": { "enabled": true } },
   "placement": { "mode": "smart" },
   "triggers": { "crons": ["*/10 * * * *"] },
   "queues": {
