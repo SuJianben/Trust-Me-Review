@@ -35,3 +35,10 @@
 - 主题区块尚需在开发店主题编辑器中启用，并填写 Worker API 地址及 Turnstile Site Key，才能验证商品页评分与评论区。
 - 自动邀评仍需在开发店创建并履约测试订单，验证 `orders/fulfilled` Webhook、Queue 与测试投递记录。
 - Turnstile 外部脚本来自 Cloudflare 官方验证服务，保留该加载方式是公开评论防机器人校验所必需的。
+
+## 公开评论提交修复
+
+- 原因：Cloudflare 实时日志确认 `timeout-or-duplicate`。Turnstile 令牌只能提交一次；主题编辑器的动态重载还可能导致同一表单重复绑定提交事件。
+- `extensions/trust-me-review-theme/assets/trust-me-review.js`：加入一次性初始化标记、提交中锁定按钮、验证码失效后自动重置，以及成功提交后的评论列表刷新。
+- `src/services/shopify.ts`、`src/worker.ts`：增加不含评论内容、个人信息或密钥的结构化失败日志，用于后续排查验证码与接口失败。
+- 待验证：发布主题扩展新版后，用新的验证码完成一次仅点击一次的公开评论提交。

@@ -11,6 +11,10 @@ import { createRequest, createTestDelivery, queueDueRequests } from "./features/
 import { randomToken, sha256 } from "./lib/crypto";
 
 const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string } } }>();
+app.onError((error, ctx) => {
+  console.error("request_failed", { method: ctx.req.method, path: new URL(ctx.req.url).pathname, error: error instanceof Error ? error.message : String(error) });
+  return ctx.json({ error: "Internal server error" }, 500);
+});
 app.use("/api/storefront/*", cors({ origin: "*", allowMethods: ["GET", "POST"] }));
 app.use("/api/admin/*", async (ctx, next) => { const admin = await verifyAdminSession(ctx.req.raw, ctx.env); if (!admin) return ctx.json({ error: "Unauthorized" }, 401); ctx.set("admin", admin); await next(); });
 app.get("/health", (ctx) => ctx.json({ ok: true, service: "trust-me-review" }));

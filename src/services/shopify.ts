@@ -10,7 +10,9 @@ export async function validWebhook(request: Request, body: string, secret: strin
 export async function verifyTurnstile(token: string, remoteIp: string | null, env: Env) {
   if (!token) return false;
   const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret: env.TURNSTILE_SECRET, response: token, remoteip: remoteIp }) });
-  return Boolean((await response.json() as { success: boolean }).success);
+  const result = await response.json() as { success: boolean; "error-codes"?: string[] };
+  if (!result.success) console.warn("turnstile_verification_failed", { errorCodes: result["error-codes"] ?? [] });
+  return result.success;
 }
 export async function buildOAuthRedirect(shop: string, env: Env) {
   const state = await hmacHex(env.TOKEN_SECRET, `${shop}:${Date.now()}`);
