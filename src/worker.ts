@@ -41,7 +41,8 @@ app.get("/auth/callback", async (ctx) => {
   if (!exchange.ok) return ctx.text("Shopify token exchange failed", 502);
   const token = await exchange.json() as { access_token: string };
   await withDb(ctx.env, async (db) => { await db.query(`insert into shops(shopify_shop_id,domain,access_token) values($1,$2,$3) on conflict(domain) do update set access_token=excluded.access_token,status='active',updated_at=now()`, [shop, shop, token.access_token]); await db.query("insert into shop_settings(shop_id) select id from shops where domain=$1 on conflict do nothing", [shop]); });
-  return ctx.redirect("/?installed=1");
+  console.info("shop_oauth_completed", { shopDomain: shop });
+  return ctx.redirect(`https://${shop}/admin/apps/${ctx.env.SHOPIFY_API_KEY}`);
 });
 
 app.get("/api/storefront/products/:productId/reviews", async (ctx) => {
