@@ -42,3 +42,9 @@
 - `extensions/trust-me-review-theme/assets/trust-me-review.js`：加入一次性初始化标记、提交中锁定按钮、验证码失效后自动重置，以及成功提交后的评论列表刷新。
 - `src/services/shopify.ts`、`src/worker.ts`：增加不含评论内容、个人信息或密钥的结构化失败日志，用于后续排查验证码与接口失败。
 - 待验证：发布主题扩展新版后，用新的验证码完成一次仅点击一次的公开评论提交。
+
+## 店铺授权引导修复
+
+- 证据：公开提交已通过 Turnstile 校验，且 Worker 未出现数据库异常；应用安装后的店铺授权记录没有写入 `shops`，前台因此返回未完成店铺连接。
+- `src/worker.ts`：应用根路径收到合法的 Shopify 店铺域名且未发现有效店铺记录时，自动转入 OAuth；OAuth 回调完成后才加载嵌入式后台。
+- `review-widget`：将该状态改为面向商家的明确提示，不再显示笼统的提交失败。

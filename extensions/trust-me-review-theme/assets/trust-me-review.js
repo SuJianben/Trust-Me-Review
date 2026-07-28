@@ -72,6 +72,8 @@ function initializeWidget(widget) {
         resetTurnstile();
         alert(payload.error === "Bot verification failed"
           ? "Verification expired. Please wait until it succeeds again, then submit once."
+          : payload.error === "Store connection is incomplete"
+            ? "This store is still connecting. Please open Trust Me Review in Shopify Admin, complete the authorization, then try again."
           : "Unable to submit review. Please try again later.");
         return;
       }

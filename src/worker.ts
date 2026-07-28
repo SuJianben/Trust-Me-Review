@@ -18,7 +18,16 @@ app.onError((error, ctx) => {
 app.use("/api/storefront/*", cors({ origin: "*", allowMethods: ["GET", "POST"] }));
 app.use("/api/admin/*", async (ctx, next) => { const admin = await verifyAdminSession(ctx.req.raw, ctx.env); if (!admin) return ctx.json({ error: "Unauthorized" }, 401); ctx.set("admin", admin); await next(); });
 app.get("/health", (ctx) => ctx.json({ ok: true, service: "trust-me-review" }));
-app.get("/", async (ctx) => { const asset=await ctx.env.ASSETS.fetch(ctx.req.raw); const html=(await asset.text()).replace("REPLACE_WITH_SHOPIFY_API_KEY",ctx.env.SHOPIFY_API_KEY); return new Response(html,{headers:{"content-type":"text/html; charset=utf-8"}}); });
+app.get("/", async (ctx) => {
+  const shop = ctx.req.query("shop")?.toLowerCase();
+  if (shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
+    const existing = await withDb(ctx.env, (db) => db.query("select 1 from shops where domain=$1 and status='active'", [shop]));
+    if (!existing.rowCount) return ctx.redirect(`/auth?shop=${encodeURIComponent(shop)}`);
+  }
+  const asset = await ctx.env.ASSETS.fetch(ctx.req.raw);
+  const html = (await asset.text()).replace("REPLACE_WITH_SHOPIFY_API_KEY", ctx.env.SHOPIFY_API_KEY);
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+});
 
 app.get("/auth", async (ctx) => {
   const shop = ctx.req.query("shop")?.toLowerCase(); if (!shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return ctx.text("Invalid shop", 400);
@@ -56,7 +65,11 @@ app.post("/api/storefront/reviews", async (ctx) => {
     await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'review_submitted',$2)", [shop.rows[0].id, JSON.stringify({ source: "public" })]); return created.rows[0];
   }).catch((error) => { if (error instanceof Error && ["RATE_LIMITED","DUPLICATE"].includes(error.message)) return error.message; throw error; });
   if (typeof result === "string") return ctx.json({ error: result === "RATE_LIMITED" ? "Too many submissions" : "A similar review already exists" }, 429);
-  if (!result) return ctx.json({ error: "Unknown store" }, 404); return ctx.json({ id: result.id, status: "pending" }, 201);
+  if (!result) {
+    console.warn("public_review_unknown_store", { shopDomain: input.data.shopDomain });
+    return ctx.json({ error: "Store connection is incomplete" }, 404);
+  }
+  return ctx.json({ id: result.id, status: "pending" }, 201);
 });
 
 app.post("/api/invitations/:token/reviews", async (ctx) => {
