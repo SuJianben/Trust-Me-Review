@@ -66,3 +66,27 @@
 - 公开评论主链路已完成开发店验证：公开提交成功后正确进入 `pending` 审核队列。
 - 修复审核 SQL 的 `review_status` 参数类型冲突；该错误只阻止审核操作，不会改变已有评论数据。
 - 新增独立 BUG 记录：`logs/bugs/2026-07-28-review-moderation-status-type.md`。
+
+## 邀评设置与测试投递后台
+
+### 本次目标
+
+让开发店可以把邀评延迟调整为 0 天，并在 Shopify 后台直接取得测试邀评链接，开始验证“订单履约 → 已购评价”的第二条链路。
+
+### 新增与调整
+
+- 新增 `src/admin/api.ts`：统一封装 App Bridge 身份令牌和后台 API 请求，避免各个后台页面重复处理认证。
+- 新增 `src/admin/features/settings/SettingsPanel.tsx`：读取并保存自动邀评开关、履约延迟、已购标识、星级颜色和双语测试邮件主题。
+- 新增 `src/admin/features/deliveries/TestDeliveriesPanel.tsx`：读取测试投递记录，展示订单、商品、计划/实际时间，并在生成后提供评价链接。
+- 调整 `src/admin/main.tsx`：后台入口只负责选项卡与评论审核，设置和测试投递由独立业务模块承载。
+
+### 自检
+
+- `npm run typecheck`：通过。
+- `npm test`：5 项通过。
+- `npm run build`：通过，包含 Worker 部署预检。
+
+### 影响与下一步
+
+- 该更新不修改数据库结构、不改 Shopify 应用权限或主题扩展。
+- 开发店验收顺序：在 Settings 将延迟设为 0 并保存 → 创建并履约一个测试订单 → 在 Test deliveries 打开评价链接 → 提交一条带“已验证购买”的评价。
