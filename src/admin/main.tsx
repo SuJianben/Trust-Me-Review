@@ -1,10 +1,11 @@
 import "@shopify/polaris/build/esm/styles.css";
-import { AppProvider, Badge, Button, Card, DataTable, Layout, Page, Tabs, Text, TextField } from "@shopify/polaris";
+import { AppProvider, Badge, Button, Card, DataTable, Layout, Page, Tabs, Text } from "@shopify/polaris";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useAuthenticatedApi } from "./api";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import { TestDeliveriesPanel } from "./features/deliveries/TestDeliveriesPanel";
+import { InvitationReviewPage } from "../invitations/InvitationReviewPage";
 
 type Review = { id:string; rating:number; author_name:string; body:string; status:string; verified_purchase:boolean; shopify_product_id:string; reply_body?:string };
 type ReviewResponse = { reviews: Review[] };
@@ -18,5 +19,4 @@ function Admin() {
   const rows=useMemo(()=>reviews.map((review)=>[review.author_name,`${review.rating}/5`,review.body,<Badge tone={review.status==="published"?"success":review.status==="pending"?"attention":"critical"}>{review.status}</Badge>,review.verified_purchase?"✓":"—",<span style={{display:"flex",gap:8}}><Button size="slim" onClick={()=>moderate(review.id,"published")}>{c.approve}</Button><Button size="slim" onClick={()=>moderate(review.id,"hidden")}>{c.hide}</Button></span>]),[reviews,c]);
   return <AppProvider i18n={{}}><Page title="Trust Me Review" subtitle="Shopify review management"><Layout><Layout.Section><Tabs tabs={[{id:"reviews",content:c.reviews},{id:"settings",content:c.settings},{id:"deliveries",content:c.deliveries}]} selected={tab} onSelect={setTab}/></Layout.Section>{error&&<Layout.Section><Card><Text as="p" tone="critical">{error}</Text></Card></Layout.Section>}{tab===0&&<Layout.Section><Card><DataTable columnContentTypes={["text","numeric","text","text","text","text"]} headings={["Customer","Rating","Review","Status","Verified","Actions"]} rows={rows}/>{!rows.length&&<Text as="p">{c.empty}</Text>}</Card></Layout.Section>}{tab===1&&<Layout.Section><SettingsPanel request={request} onError={setError}/></Layout.Section>}{tab===2&&<Layout.Section><TestDeliveriesPanel request={request} onError={setError}/></Layout.Section>}</Layout></Page></AppProvider>;
 }
-function Invitation() { const token=location.pathname.split("/").pop() ?? ""; const [message,setMessage]=useState(""); const submit=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();const fields=new FormData(event.currentTarget);const response=await fetch(`/api/invitations/${token}/reviews`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({rating:Number(fields.get("rating")),authorName:String(fields.get("authorName")??""),title:String(fields.get("title")??""),body:String(fields.get("body")??"")})});setMessage(response.ok?"Thank you. Your review is awaiting approval.":"This invitation is invalid or has already been used.");};return <AppProvider i18n={{}}><Page title="Share your review"><Card><form onSubmit={submit} style={{display:"grid",gap:12}}><TextField label="Name" name="authorName" autoComplete="name" onChange={()=>{}}/><TextField label="Rating (1-5)" name="rating" type="number" min={1} max={5} value="5" onChange={()=>{}} autoComplete="off"/><TextField label="Title" name="title" autoComplete="off" onChange={()=>{}}/><TextField label="Review" name="body" multiline autoComplete="off" onChange={()=>{}}/><Button submit variant="primary">Submit review</Button>{message&&<Text as="p">{message}</Text>}</form></Card></Page></AppProvider>; }
-createRoot(document.getElementById("root")!).render(location.pathname.startsWith("/review/")?<Invitation/>:<Admin/>);
+createRoot(document.getElementById("root")!).render(location.pathname.startsWith("/review/") ? <InvitationReviewPage token={location.pathname.split("/").pop() ?? ""} /> : <Admin/>);
