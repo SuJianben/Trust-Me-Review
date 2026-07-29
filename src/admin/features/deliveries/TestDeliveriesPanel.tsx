@@ -23,6 +23,8 @@ function formattedDate(value: string | null) {
 export function TestDeliveriesPanel({ request, onError }: Props) {
   const [deliveries, setDeliveries] = useState<TestDelivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,6 +38,18 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
   }, [onError, request]);
 
   useEffect(() => { void load(); }, [load]);
+  const processDueDeliveries = async () => {
+    setProcessing(true);
+    setNotice("");
+    try {
+      const result = await request<{ queued: number }>("/api/admin/test-deliveries/process-due", { method: "POST" });
+      setNotice(result.queued ? `Queued ${result.queued} due test delivery. Refresh in a moment to get the review link.` : "There are no due test deliveries to run.");
+    } catch (issue) {
+      onError((issue as Error).message);
+    } finally {
+      setProcessing(false);
+    }
+  };
   const rows = deliveries.map((delivery) => [
     delivery.shopify_order_id,
     delivery.shopify_product_id,
@@ -48,8 +62,9 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
   return <Card>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16 }}>
       <div><Text as="h2" variant="headingMd">Test deliveries</Text><Text as="p" tone="subdued">V1 records a test invitation here and does not send a real customer email.</Text></div>
-      <Button onClick={() => void load()} loading={loading}>Refresh</Button>
+      <div style={{ display: "flex", gap: 8 }}><Button onClick={() => void processDueDeliveries()} loading={processing}>Run due deliveries</Button><Button onClick={() => void load()} loading={loading}>Refresh</Button></div>
     </div>
+    {notice && <Text as="p">{notice}</Text>}
     <DataTable columnContentTypes={["text", "text", "text", "text", "text", "text"]} headings={["Order", "Product", "Status", "Scheduled", "Sent", "Review link"]} rows={rows} />
     {!loading && !rows.length && <Text as="p">No test deliveries yet. Fulfill a development-store order after setting the delay to 0 days.</Text>}
   </Card>;

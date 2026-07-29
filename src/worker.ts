@@ -119,6 +119,18 @@ app.post("/api/admin/reviews/:id/reply", async (ctx) => {
 app.get("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const row = await withDb(ctx.env, (db) => db.query("select ss.* from shop_settings ss join shops s on s.id=ss.shop_id where s.domain=$1", [admin.shopDomain])); return ctx.json(row.rows[0] ?? {}); });
 app.patch("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const input = settingsSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() },400); await withDb(ctx.env, async (db) => { await db.query(`update shop_settings ss set request_enabled=$1,request_delay_days=$2,show_verified_badge=$3,star_color=$4,email_subject_en=$5,email_subject_zh=$6,updated_at=now() from shops s where ss.shop_id=s.id and s.domain=$7`,[input.data.requestEnabled,input.data.requestDelayDays,input.data.showVerifiedBadge,input.data.starColor,input.data.emailSubjectEn,input.data.emailSubjectZh,admin.shopDomain]); }); return ctx.json({ ok:true }); });
 app.get("/api/admin/test-deliveries", async (ctx) => { const admin=ctx.get("admin")!; const rows=await withDb(ctx.env,(db)=>db.query("select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.test_email_payload,p.shopify_product_id from review_requests rr join shops s on s.id=rr.shop_id join products p on p.id=rr.product_id where s.domain=$1 order by rr.created_at desc limit 100",[admin.shopDomain])); return ctx.json(rows.rows); });
+app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const requestIds = await withDb(ctx.env, async (db) => {
+    const shop = await db.query<{ id: string }>("select id from shops where domain=$1 and status='active'", [admin.shopDomain]);
+    if (!shop.rowCount) return [];
+    const due = await queueDueRequests(db, shop.rows[0].id);
+    await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'test_delivery_manual_run',$2)", [shop.rows[0].id, JSON.stringify({ queued: due.length })]);
+    return due.map((task) => task.id);
+  });
+  for (const requestId of requestIds) await ctx.env.REVIEW_QUEUE.send({ type: "send_test_request", requestId });
+  return ctx.json({ queued: requestIds.length });
+});
 
 app.post("/webhooks/shopify", async (ctx) => { const body=await ctx.req.text(); if (!(await validWebhook(ctx.req.raw,body,ctx.env.SHOPIFY_API_SECRET))) return ctx.text("Invalid HMAC",401); const deliveryId=ctx.req.header("x-shopify-webhook-id") ?? await sha256(`${ctx.req.header("x-shopify-topic")}:${body}`); const topic=ctx.req.header("x-shopify-topic") ?? "unknown"; const shopDomain=ctx.req.header("x-shopify-shop-domain") ?? ""; const payload=JSON.parse(body); const accepted=await withDb(ctx.env,async(db)=>{ const shop=await db.query<{id:string}>("select id from shops where domain=$1",[shopDomain]); const insert=await db.query("insert into webhook_events(shop_id,delivery_id,topic,payload) values($1,$2,$3,$4) on conflict(delivery_id) do nothing returning id",[shop.rows[0]?.id ?? null,deliveryId,topic,payload]); return Boolean(insert.rowCount); }); if(accepted) await ctx.env.REVIEW_QUEUE.send({type:"shopify_webhook",deliveryId,topic,shopDomain,payload}); return ctx.text("OK",200); });
 app.get("*", (ctx) => ctx.env.ASSETS.fetch(ctx.req.raw));

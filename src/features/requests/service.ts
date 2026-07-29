@@ -7,7 +7,12 @@ export async function createRequest(client: pg.Client, args: { shopId: string; p
     values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(shop_id,shopify_order_id,product_id) do nothing returning id`, [args.shopId,args.productId,args.orderId,args.variantId ?? null,emailHash,tokenHash,await seal(token,args.tokenSecret),args.scheduledAt]);
   return result.rowCount ? { id: result.rows[0].id, token } : null;
 }
-export async function queueDueRequests(client: pg.Client) { return (await client.query<{ id: string }>("select id from review_requests where status='scheduled' and scheduled_at <= now() limit 100")).rows; }
+export async function queueDueRequests(client: pg.Client, shopId?: string) {
+  if (shopId) {
+    return (await client.query<{ id: string }>("select id from review_requests where shop_id=$1 and status='scheduled' and scheduled_at <= now() limit 100", [shopId])).rows;
+  }
+  return (await client.query<{ id: string }>("select id from review_requests where status='scheduled' and scheduled_at <= now() limit 100")).rows;
+}
 export async function createTestDelivery(client: pg.Client, requestId: string, appUrl: string, tokenSecret: string) {
   const request = await client.query<{ token_ciphertext: string; shop_id: string }>("select token_ciphertext,shop_id from review_requests where id=$1 and status='scheduled' for update", [requestId]);
   if (!request.rowCount) return false;
