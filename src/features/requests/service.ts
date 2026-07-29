@@ -17,6 +17,21 @@ export async function createTestDelivery(client: pg.Client, requestId: string, a
   const request = await client.query<{ token_ciphertext: string; shop_id: string }>("select token_ciphertext,shop_id from review_requests where id=$1 and status='scheduled' for update", [requestId]);
   if (!request.rowCount) return false;
   const token=await unseal(request.rows[0].token_ciphertext,tokenSecret);
-  await client.query("update review_requests set status='sent',sent_at=now(),attempt_count=attempt_count+1,test_email_payload=jsonb_build_object('mode','test','createdAt',now()::text,'reviewUrl',$2::text,'note','A real delivery provider is intentionally disabled in V1') where id=$1", [requestId,`${appUrl}/review/${token}`]);
+  await client.query("update review_requests set status='sent',sent_at=now(),attempt_count=attempt_count+1,failure_reason=null,test_email_payload=jsonb_build_object('mode','test','createdAt',now()::text,'reviewUrl',$2::text,'note','A real delivery provider is intentionally disabled in V1') where id=$1", [requestId,`${appUrl}/review/${token}`]);
   return true;
+}
+
+export async function recordTestDeliveryFailure(client: pg.Client, requestId: string, reason: string, isFinalAttempt: boolean) {
+  await client.query(
+    "update review_requests set status=case when $3 then 'failed'::request_status else status end,scheduled_at=case when $3 then scheduled_at else now() + interval '5 minutes' end,attempt_count=attempt_count+1,failure_reason=$2,updated_at=now() where id=$1",
+    [requestId, reason.slice(0, 500), isFinalAttempt],
+  );
+}
+
+export async function retryFailedTestDelivery(client: pg.Client, shopDomain: string, requestId: string) {
+  const result = await client.query<{ id: string }>(`
+    update review_requests rr set status='scheduled',scheduled_at=now(),failure_reason=null,updated_at=now()
+    from shops s where rr.shop_id=s.id and s.domain=$1 and rr.id=$2 and rr.status='failed'
+    returning rr.id`, [shopDomain, requestId]);
+  return result.rows[0] ?? null;
 }

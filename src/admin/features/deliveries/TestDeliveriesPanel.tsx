@@ -9,6 +9,8 @@ type TestDelivery = {
   status: string;
   scheduled_at: string;
   sent_at: string | null;
+  attempt_count: number;
+  failure_reason: string | null;
   test_email_payload: { reviewUrl?: string; note?: string } | null;
 };
 
@@ -51,13 +53,24 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
       setProcessing(false);
     }
   };
+  const retry = async (id: string) => {
+    try {
+      await request(`/api/admin/test-deliveries/${id}/retry`, { method: "POST" });
+      setNotice("The failed test delivery was queued again. Refresh in a moment to check its status.");
+      await load();
+    } catch (issue) {
+      onError((issue as Error).message);
+    }
+  };
   const rows = deliveries.map((delivery) => [
     delivery.shopify_order_id,
     delivery.shopify_product_id,
     delivery.status,
     formattedDate(delivery.scheduled_at),
     formattedDate(delivery.sent_at),
+    delivery.failure_reason ? `${delivery.failure_reason} (attempts: ${delivery.attempt_count})` : "—",
     delivery.test_email_payload?.reviewUrl ? <Button size="slim" url={delivery.test_email_payload.reviewUrl} target="_blank">Open review link</Button> : "—",
+    delivery.status === "failed" ? <Button size="slim" onClick={() => void retry(delivery.id)}>Retry</Button> : "—",
   ]);
 
   return <Card>
@@ -66,7 +79,7 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
       <div style={{ display: "flex", gap: 8 }}><Button onClick={() => void processDueDeliveries()} loading={processing}>Run due deliveries</Button><Button onClick={() => void load()} loading={loading}>Refresh</Button></div>
     </div>
     {notice && <Text as="p">{notice}</Text>}
-    <DataTable columnContentTypes={["text", "text", "text", "text", "text", "text"]} headings={["Order", "Product", "Status", "Scheduled", "Sent", "Review link"]} rows={rows} />
+    <DataTable columnContentTypes={["text", "text", "text", "text", "text", "text", "text", "text"]} headings={["Order", "Product", "Status", "Scheduled", "Sent", "Last issue", "Review link", "Actions"]} rows={rows} />
     {!loading && !rows.length && <Text as="p">No test deliveries yet. Fulfill a development-store order after setting the delay to 0 days.</Text>}
   </Card>;
 }

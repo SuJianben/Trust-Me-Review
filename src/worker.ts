@@ -8,8 +8,8 @@ import { validWebhook, verifyTurnstile } from "./services/shopify";
 import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/auth";
 import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
-import { ensureProduct, hasProhibitedText, publicReviews, reservePublicSubmission } from "./features/reviews/service";
-import { createRequest, createTestDelivery, queueDueRequests } from "./features/requests/service";
+import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
+import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
 
@@ -52,9 +52,13 @@ app.get("/auth/callback", async (ctx) => {
 app.get("/api/storefront/products/:productId/reviews", async (ctx) => {
   const shop = ctx.req.query("shop"); if (!shop) return ctx.json({ error: "shop is required" }, 400);
   const page = Math.max(1, Number(ctx.req.query("page") ?? 1));
-  const rows = await withDb(ctx.env, (db) => publicReviews(db, shop, ctx.req.param("productId"), page));
-  const total = Number(rows[0]?.total ?? 0); const average = Number(rows[0]?.average ?? 0);
-  return ctx.json({ reviews: rows.map(({ total: _total, average: _average, ...review }) => review), total, average, page, pageSize: 10 });
+  const requestedSort = ctx.req.query("sort");
+  const sort: StorefrontReviewSort = requestedSort === "highest" || requestedSort === "lowest" ? requestedSort : "newest";
+  const data = await withDb(ctx.env, async (db) => {
+    const [reviews, summary] = await Promise.all([publicReviews(db, shop, ctx.req.param("productId"), page, sort), publicReviewSummary(db, shop, ctx.req.param("productId"))]);
+    return { reviews, summary };
+  });
+  return ctx.json({ reviews: data.reviews.map(({ total: _total, average: _average, ...review }) => review), ...data.summary, page, pageSize: 10, sort });
 });
 
 app.post("/api/storefront/reviews", async (ctx) => {
@@ -120,7 +124,7 @@ app.post("/api/admin/reviews/:id/reply", async (ctx) => {
 });
 app.get("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const row = await withDb(ctx.env, (db) => db.query("select ss.* from shop_settings ss join shops s on s.id=ss.shop_id where s.domain=$1", [admin.shopDomain])); return ctx.json(row.rows[0] ?? {}); });
 app.patch("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const input = settingsSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() },400); await withDb(ctx.env, async (db) => { await db.query(`update shop_settings ss set request_enabled=$1,request_delay_days=$2,show_verified_badge=$3,star_color=$4,email_subject_en=$5,email_subject_zh=$6,updated_at=now() from shops s where ss.shop_id=s.id and s.domain=$7`,[input.data.requestEnabled,input.data.requestDelayDays,input.data.showVerifiedBadge,input.data.starColor,input.data.emailSubjectEn,input.data.emailSubjectZh,admin.shopDomain]); }); return ctx.json({ ok:true }); });
-app.get("/api/admin/test-deliveries", async (ctx) => { const admin=ctx.get("admin")!; const rows=await withDb(ctx.env,(db)=>db.query("select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.test_email_payload,p.shopify_product_id from review_requests rr join shops s on s.id=rr.shop_id join products p on p.id=rr.product_id where s.domain=$1 order by rr.created_at desc limit 100",[admin.shopDomain])); return ctx.json(rows.rows); });
+app.get("/api/admin/test-deliveries", async (ctx) => { const admin=ctx.get("admin")!; const rows=await withDb(ctx.env,(db)=>db.query("select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.attempt_count,rr.failure_reason,rr.test_email_payload,p.shopify_product_id from review_requests rr join shops s on s.id=rr.shop_id join products p on p.id=rr.product_id where s.domain=$1 order by rr.created_at desc limit 100",[admin.shopDomain])); return ctx.json(rows.rows); });
 app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
   const admin = ctx.get("admin")!;
   const requestIds = await withDb(ctx.env, async (db) => {
@@ -132,6 +136,13 @@ app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
   });
   for (const requestId of requestIds) await ctx.env.REVIEW_QUEUE.send({ type: "send_test_request", requestId });
   return ctx.json({ queued: requestIds.length });
+});
+app.post("/api/admin/test-deliveries/:id/retry", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const retried = await withDb(ctx.env, (db) => retryFailedTestDelivery(db, admin.shopDomain, ctx.req.param("id")));
+  if (!retried) return ctx.json({ error: "Failed test delivery not found" }, 404);
+  await ctx.env.REVIEW_QUEUE.send({ type: "send_test_request", requestId: retried.id });
+  return ctx.json({ queued: true });
 });
 
 app.post("/webhooks/shopify", async (ctx) => { const body=await ctx.req.text(); if (!(await validWebhook(ctx.req.raw,body,ctx.env.SHOPIFY_API_SECRET))) return ctx.text("Invalid HMAC",401); const deliveryId=ctx.req.header("x-shopify-webhook-id") ?? await sha256(`${ctx.req.header("x-shopify-topic")}:${body}`); const topic=ctx.req.header("x-shopify-topic") ?? "unknown"; const shopDomain=ctx.req.header("x-shopify-shop-domain") ?? ""; const payload=JSON.parse(body); const accepted=await withDb(ctx.env,async(db)=>{ const shop=await db.query<{id:string}>("select id from shops where domain=$1",[shopDomain]); const insert=await db.query("insert into webhook_events(shop_id,delivery_id,topic,payload) values($1,$2,$3,$4) on conflict(delivery_id) do nothing returning id",[shop.rows[0]?.id ?? null,deliveryId,topic,payload]); return Boolean(insert.rowCount); }); if(accepted) await ctx.env.REVIEW_QUEUE.send({type:"shopify_webhook",deliveryId,topic,shopDomain,payload}); return ctx.text("OK",200); });
@@ -186,4 +197,4 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     });
   }
 }
-export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };
+export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };

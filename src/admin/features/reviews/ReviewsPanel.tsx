@@ -66,6 +66,11 @@ export function ReviewsPanel({ request, onError }: Props) {
     setReplyBody(review.reply_body ?? "");
   };
 
+  const deleteReview = async (id: string) => {
+    if (!window.confirm("Delete this review? It will no longer appear in the storefront.")) return;
+    await updateReview(id, { status: "deleted" });
+  };
+
   const saveReply = async () => {
     if (!replyTarget) return;
     setReplying(true);
@@ -90,6 +95,7 @@ export function ReviewsPanel({ request, onError }: Props) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       <Button size="slim" onClick={() => void updateReview(review.id, { status: "published" })}>Publish</Button>
       <Button size="slim" onClick={() => void updateReview(review.id, { status: "hidden" })}>Hide</Button>
+      <Button size="slim" tone="critical" onClick={() => void deleteReview(review.id)}>Delete</Button>
       <Button size="slim" onClick={() => void updateReview(review.id, { pinned: !review.pinned })}>{review.pinned ? "Unpin" : "Pin"}</Button>
       <Button size="slim" onClick={() => openReply(review)}>Reply</Button>
     </div>,
