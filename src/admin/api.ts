@@ -2,8 +2,9 @@ import { useCallback } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 type ApiError = { error?: string };
+export type AuthenticatedRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
-export function useAuthenticatedApi() {
+export function useAuthenticatedApi(): AuthenticatedRequest {
   const shopify = useAppBridge();
 
   return useCallback(async <T,>(path: string, options?: RequestInit): Promise<T> => {

@@ -1,22 +1,18 @@
 import "@shopify/polaris/build/esm/styles.css";
-import { AppProvider, Badge, Button, Card, DataTable, Layout, Page, Tabs, Text } from "@shopify/polaris";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppProvider, Card, Layout, Page, Tabs, Text } from "@shopify/polaris";
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useAuthenticatedApi } from "./api";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 import { TestDeliveriesPanel } from "./features/deliveries/TestDeliveriesPanel";
 import { InvitationReviewPage } from "../invitations/InvitationReviewPage";
+import { ReviewsPanel } from "./features/reviews/ReviewsPanel";
 
-type Review = { id:string; rating:number; author_name:string; body:string; status:string; verified_purchase:boolean; shopify_product_id:string; reply_body?:string };
-type ReviewResponse = { reviews: Review[] };
-const copy = { en:{reviews:"Reviews",settings:"Settings",deliveries:"Test deliveries",approve:"Publish",hide:"Hide",deleted:"Delete",reply:"Reply",empty:"No reviews yet."}, zh:{reviews:"评价管理",settings:"设置",deliveries:"测试邀评",approve:"发布",hide:"隐藏",deleted:"删除",reply:"回复",empty:"暂时没有评价。"} };
+const copy = { en:{reviews:"Reviews",settings:"Settings",deliveries:"Test deliveries"}, zh:{reviews:"评价管理",settings:"设置",deliveries:"测试邀评"} };
 
 function Admin() {
-  const [language,setLanguage]=useState<"en"|"zh">("en"); const [tab,setTab]=useState(0); const [reviews,setReviews]=useState<Review[]>([]); const [error,setError]=useState(""); const c=copy[language];
+  const [language] = useState<"en"|"zh">("en"); const [tab,setTab]=useState(0); const [error,setError]=useState(""); const c=copy[language];
   const request=useAuthenticatedApi();
-  const load=useCallback(()=>request<ReviewResponse>("/api/admin/reviews").then((data)=>setReviews(data.reviews)).catch((issue:Error)=>setError(issue.message)),[request]); useEffect(()=>{load();},[load]);
-  const moderate=async(id:string,status:string)=>{ try{await request(`/api/admin/reviews/${id}`,{method:"PATCH",body:JSON.stringify({status})});load();}catch(issue){setError((issue as Error).message);} };
-  const rows=useMemo(()=>reviews.map((review)=>[review.author_name,`${review.rating}/5`,review.body,<Badge tone={review.status==="published"?"success":review.status==="pending"?"attention":"critical"}>{review.status}</Badge>,review.verified_purchase?"✓":"—",<span style={{display:"flex",gap:8}}><Button size="slim" onClick={()=>moderate(review.id,"published")}>{c.approve}</Button><Button size="slim" onClick={()=>moderate(review.id,"hidden")}>{c.hide}</Button></span>]),[reviews,c]);
-  return <AppProvider i18n={{}}><Page title="Trust Me Review" subtitle="Shopify review management"><Layout><Layout.Section><Tabs tabs={[{id:"reviews",content:c.reviews},{id:"settings",content:c.settings},{id:"deliveries",content:c.deliveries}]} selected={tab} onSelect={setTab}/></Layout.Section>{error&&<Layout.Section><Card><Text as="p" tone="critical">{error}</Text></Card></Layout.Section>}{tab===0&&<Layout.Section><Card><DataTable columnContentTypes={["text","numeric","text","text","text","text"]} headings={["Customer","Rating","Review","Status","Verified","Actions"]} rows={rows}/>{!rows.length&&<Text as="p">{c.empty}</Text>}</Card></Layout.Section>}{tab===1&&<Layout.Section><SettingsPanel request={request} onError={setError}/></Layout.Section>}{tab===2&&<Layout.Section><TestDeliveriesPanel request={request} onError={setError}/></Layout.Section>}</Layout></Page></AppProvider>;
+  return <AppProvider i18n={{}}><Page title="Trust Me Review" subtitle="Shopify review management"><Layout><Layout.Section><Tabs tabs={[{id:"reviews",content:c.reviews},{id:"settings",content:c.settings},{id:"deliveries",content:c.deliveries}]} selected={tab} onSelect={setTab}/></Layout.Section>{error&&<Layout.Section><Card><Text as="p" tone="critical">{error}</Text></Card></Layout.Section>}{tab===0&&<Layout.Section><ReviewsPanel request={request} onError={setError}/></Layout.Section>}{tab===1&&<Layout.Section><SettingsPanel request={request} onError={setError}/></Layout.Section>}{tab===2&&<Layout.Section><TestDeliveriesPanel request={request} onError={setError}/></Layout.Section>}</Layout></Page></AppProvider>;
 }
 createRoot(document.getElementById("root")!).render(location.pathname.startsWith("/review/") ? <InvitationReviewPage token={location.pathname.split("/").pop() ?? ""} /> : <Admin/>);

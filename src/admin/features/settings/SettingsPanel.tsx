@@ -1,5 +1,6 @@
 import { Banner, Button, Card, Checkbox, FormLayout, Text, TextField } from "@shopify/polaris";
 import { useCallback, useEffect, useState } from "react";
+import type { AuthenticatedRequest } from "../../api";
 
 export type ShopSettings = {
   request_enabled: boolean;
@@ -11,7 +12,7 @@ export type ShopSettings = {
 };
 
 type Props = {
-  request: <T>(path: string, options?: RequestInit) => Promise<T>;
+  request: AuthenticatedRequest;
   onError: (message: string) => void;
 };
 

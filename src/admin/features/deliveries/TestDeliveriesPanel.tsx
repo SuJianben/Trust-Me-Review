@@ -1,5 +1,6 @@
 import { Button, Card, DataTable, Text } from "@shopify/polaris";
 import { useCallback, useEffect, useState } from "react";
+import type { AuthenticatedRequest } from "../../api";
 
 type TestDelivery = {
   id: string;
@@ -12,7 +13,7 @@ type TestDelivery = {
 };
 
 type Props = {
-  request: <T>(path: string, options?: RequestInit) => Promise<T>;
+  request: AuthenticatedRequest;
   onError: (message: string) => void;
 };
 
