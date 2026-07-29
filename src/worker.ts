@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type pg from "pg";
 import { z } from "zod";
 import type { Env, QueueJob, ReviewStatus } from "./types";
 import { withDb, audit } from "./services/db";
@@ -10,6 +11,7 @@ import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySche
 import { ensureProduct, hasProhibitedText, publicReviews, reservePublicSubmission } from "./features/reviews/service";
 import { createRequest, createTestDelivery, queueDueRequests } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
+import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
 
 const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
 app.onError((error, ctx) => {
@@ -80,8 +82,8 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
   if (hasProhibitedText(`${input.data.title ?? ""} ${input.data.body}`)) return ctx.json({ error: "Submission was rejected" }, 422);
   const tokenHash = await sha256(ctx.req.param("token"));
   const created = await withDb(ctx.env, async (db) => {
-    const request = await db.query<{ id: string; shop_id: string; product_id: string; shopify_order_id: string; shopify_variant_id: string | null }>("select id,shop_id,product_id,shopify_order_id,shopify_variant_id from review_requests where token_hash=$1 and status='sent' for update", [tokenHash]); if (!request.rowCount) return null;
-    const value = request.rows[0]; const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,'pending','invitation',true) returning id", [value.shop_id,value.product_id,value.shopify_order_id,value.shopify_variant_id,input.data.rating,input.data.title ?? null,input.data.body,input.data.authorName]);
+    const request = await db.query<{ id: string; shop_id: string; product_id: string; shopify_order_id: string; shopify_variant_id: string | null; customer_email_hash: string }>("select id,shop_id,product_id,shopify_order_id,shopify_variant_id,customer_email_hash from review_requests where token_hash=$1 and status='sent' for update", [tokenHash]); if (!request.rowCount) return null;
+    const value = request.rows[0]; const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,author_email_hash,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','invitation',true) returning id", [value.shop_id,value.product_id,value.shopify_order_id,value.shopify_variant_id,input.data.rating,input.data.title ?? null,input.data.body,input.data.authorName,value.customer_email_hash]);
     await db.query("update review_requests set status='submitted',submitted_at=now() where id=$1", [value.id]); return review.rows[0];
   });
   if (!created) return ctx.json({ error: "Invitation is invalid or already used" }, 404); return ctx.json({ id: created.id, status: "pending", verifiedPurchase: true }, 201);
@@ -135,9 +137,53 @@ app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
 app.post("/webhooks/shopify", async (ctx) => { const body=await ctx.req.text(); if (!(await validWebhook(ctx.req.raw,body,ctx.env.SHOPIFY_API_SECRET))) return ctx.text("Invalid HMAC",401); const deliveryId=ctx.req.header("x-shopify-webhook-id") ?? await sha256(`${ctx.req.header("x-shopify-topic")}:${body}`); const topic=ctx.req.header("x-shopify-topic") ?? "unknown"; const shopDomain=ctx.req.header("x-shopify-shop-domain") ?? ""; const payload=JSON.parse(body); const accepted=await withDb(ctx.env,async(db)=>{ const shop=await db.query<{id:string}>("select id from shops where domain=$1",[shopDomain]); const insert=await db.query("insert into webhook_events(shop_id,delivery_id,topic,payload) values($1,$2,$3,$4) on conflict(delivery_id) do nothing returning id",[shop.rows[0]?.id ?? null,deliveryId,topic,payload]); return Boolean(insert.rowCount); }); if(accepted) await ctx.env.REVIEW_QUEUE.send({type:"shopify_webhook",deliveryId,topic,shopDomain,payload}); return ctx.text("OK",200); });
 app.get("*", (ctx) => ctx.env.ASSETS.fetch(ctx.req.raw));
 
+async function markWebhookProcessed(db: pg.Client, deliveryId: string) {
+  await db.query("update webhook_events set status='processed',processed_at=now(),payload='{}'::jsonb where delivery_id=$1", [deliveryId]);
+}
+
 async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, env: Env) {
-  if (job.topic === "app/uninstalled") { await withDb(env, async(db)=>{ await db.query("update shops set status='uninstalled',access_token=null,updated_at=now() where domain=$1",[job.shopDomain]); await db.query("update webhook_events set status='processed',processed_at=now() where delivery_id=$1",[job.deliveryId]); }); return; }
-  if (["customers/data_request","customers/redact","shop/redact"].includes(job.topic)) { await withDb(env,async(db)=>{ if(job.topic==="shop/redact") await db.query("update shops set status='redacted',access_token=null where domain=$1",[job.shopDomain]); await db.query("update webhook_events set status='processed',processed_at=now() where delivery_id=$1",[job.deliveryId]); }); return; }
-  if (job.topic === "orders/fulfilled") { const payload=job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number }> }; if(!payload.id || !payload.email) return; await withDb(env,async(db)=>{ const shop=await db.query<{id:string;request_delay_days:number;request_enabled:boolean}>("select s.id,ss.request_delay_days,ss.request_enabled from shops s join shop_settings ss on ss.shop_id=s.id where s.domain=$1 and s.status='active'",[job.shopDomain]); if(!shop.rowCount || !shop.rows[0].request_enabled) return; const due=new Date(Date.now()+shop.rows[0].request_delay_days*86400000); for(const item of payload.line_items ?? []) if(item.product_id){ const productId=await ensureProduct(db,shop.rows[0].id,String(item.product_id)); await createRequest(db,{shopId:shop.rows[0].id,productId,orderId:String(payload.id),variantId:item.variant_id?String(item.variant_id):undefined,email:payload.email!,scheduledAt:due,tokenSecret:env.TOKEN_SECRET}); } await db.query("update webhook_events set status='processed',processed_at=now() where delivery_id=$1",[job.deliveryId]); }); }
+  if (job.topic === "app/uninstalled") {
+    await withDb(env, async (db) => {
+      const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [job.shopDomain]);
+      if (shop.rowCount) {
+        await cancelOutstandingRequests(db, shop.rows[0].id);
+        await db.query("update shops set status='uninstalled',access_token=null,updated_at=now() where id=$1", [shop.rows[0].id]);
+      }
+      await markWebhookProcessed(db, job.deliveryId);
+    });
+    return;
+  }
+
+  if (["customers/data_request", "customers/redact", "shop/redact"].includes(job.topic)) {
+    await withDb(env, async (db) => {
+      const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [job.shopDomain]);
+      if (job.topic === "shop/redact") {
+        if (shop.rowCount) await eraseShopData(db, shop.rows[0].id);
+        else await markWebhookProcessed(db, job.deliveryId);
+        return;
+      }
+      if (shop.rowCount) {
+        if (job.topic === "customers/data_request") await recordDataRequest(db, shop.rows[0].id);
+        else await redactCustomerData(db, shop.rows[0].id, job.payload);
+      }
+      await markWebhookProcessed(db, job.deliveryId);
+    });
+    return;
+  }
+
+  if (job.topic === "orders/fulfilled") {
+    const payload = job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number }> };
+    await withDb(env, async (db) => {
+      const shop = await db.query<{ id: string; request_delay_days: number; request_enabled: boolean }>("select s.id,ss.request_delay_days,ss.request_enabled from shops s join shop_settings ss on ss.shop_id=s.id where s.domain=$1 and s.status='active'", [job.shopDomain]);
+      if (payload.id && payload.email && shop.rowCount && shop.rows[0].request_enabled) {
+        const due = new Date(Date.now() + shop.rows[0].request_delay_days * 86400000);
+        for (const item of payload.line_items ?? []) if (item.product_id) {
+          const productId = await ensureProduct(db, shop.rows[0].id, String(item.product_id));
+          await createRequest(db, { shopId: shop.rows[0].id, productId, orderId: String(payload.id), variantId: item.variant_id ? String(item.variant_id) : undefined, email: payload.email, scheduledAt: due, tokenSecret: env.TOKEN_SECRET });
+        }
+      }
+      await markWebhookProcessed(db, job.deliveryId);
+    });
+  }
 }
 export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };
