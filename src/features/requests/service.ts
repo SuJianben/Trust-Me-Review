@@ -17,6 +17,6 @@ export async function createTestDelivery(client: pg.Client, requestId: string, a
   const request = await client.query<{ token_ciphertext: string; shop_id: string }>("select token_ciphertext,shop_id from review_requests where id=$1 and status='scheduled' for update", [requestId]);
   if (!request.rowCount) return false;
   const token=await unseal(request.rows[0].token_ciphertext,tokenSecret);
-  await client.query("update review_requests set status='sent',sent_at=now(),attempt_count=attempt_count+1,test_email_payload=jsonb_build_object('mode','test','createdAt',now()::text,'reviewUrl',$2,'note','A real delivery provider is intentionally disabled in V1') where id=$1", [requestId,`${appUrl}/review/${token}`]);
+  await client.query("update review_requests set status='sent',sent_at=now(),attempt_count=attempt_count+1,test_email_payload=jsonb_build_object('mode','test','createdAt',now()::text,'reviewUrl',$2::text,'note','A real delivery provider is intentionally disabled in V1') where id=$1", [requestId,`${appUrl}/review/${token}`]);
   return true;
 }
