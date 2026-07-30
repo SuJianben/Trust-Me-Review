@@ -286,3 +286,10 @@
 - 进入详情时左侧 Product management 保持选中；返回按钮回到 `Settings → Product management` 列表。
 - `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；详情页与返回列表路径均返回 `200`。
 - 已发布 Worker 版本 `f4cab785-47fb-47e4-92f8-d57a68f3b610`。
+
+## 商品评分趋势悬浮提示
+
+- 产品详情的近 12 个月评分趋势图新增节点悬浮提示，展示对应月份的评论数与平均评分；无评论月份显示 0。
+- 键盘聚焦节点同样可显示提示，保留基础可访问性。
+- `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；详情路径返回 `200`。
+- 已发布 Worker 版本 `7df47edd-dc8e-4292-8b36-a78a5e5e4371`。
