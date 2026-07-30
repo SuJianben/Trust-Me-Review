@@ -10,7 +10,9 @@ import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductTitles } from "./features/products/service";
-import { listAdminProducts } from "./features/products/admin-service";
+import { listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
+import { syncProductCatalogPage } from "./features/products/catalog-service";
+import { productRequestSettingSchema } from "./features/products/schemas";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
@@ -163,9 +165,32 @@ app.get("/api/admin/reviews", async (ctx) => {
 });
 app.get("/api/admin/products", async (ctx) => {
   const admin = ctx.get("admin")!;
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
-  const products = await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain));
-  return ctx.json(products.rows);
+  const filter = ctx.req.query("filter") === "active" || ctx.req.query("filter") === "inactive" ? ctx.req.query("filter") as ProductRequestFilter : "all";
+  const page = Math.max(1, Number(ctx.req.query("page") ?? 1) || 1);
+  const search = (ctx.req.query("search") ?? "").trim().slice(0, 120);
+  return ctx.json(await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain, filter, page, search)));
+});
+app.post("/api/admin/products/sync", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const input = await ctx.req.json().catch(() => ({})) as { cursor?: unknown };
+  const cursor = typeof input.cursor === "string" && input.cursor.length <= 1024 ? input.cursor : undefined;
+  const result = await withDb(ctx.env, (db) => syncProductCatalogPage(db, ctx.env, admin.shopDomain, cursor));
+  return ctx.json(result);
+});
+app.patch("/api/admin/products/:productId", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const input = productRequestSettingSchema.safeParse(await ctx.req.json());
+  if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
+  const updated = await withDb(ctx.env, async (db) => {
+    const product = await updateProductRequestEnabled(db, admin.shopDomain, ctx.req.param("productId"), input.data.requestEnabled);
+    if (product) {
+      const action = input.data.requestEnabled ? "product_review_requests_enabled" : "product_review_requests_disabled";
+      await audit(db, product.shop_id, action, "product", product.id, admin.userId);
+      await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,$2,$3)", [product.shop_id, "product_review_request_setting_updated", JSON.stringify({ enabled: input.data.requestEnabled })]);
+    }
+    return product;
+  });
+  return updated ? ctx.json({ ok: true }) : ctx.json({ error: "Product not found" }, 404);
 });
 app.patch("/api/admin/reviews/:id", async (ctx) => {
   const admin = ctx.get("admin")!; const input = moderationSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
@@ -260,7 +285,7 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
         const due = new Date(Date.now() + shop.rows[0].request_delay_days * 86400000);
         for (const item of payload.line_items ?? []) if (item.product_id) {
           const productId = await ensureProduct(db, shop.rows[0].id, String(item.product_id), item.title);
-          await createRequest(db, { shopId: shop.rows[0].id, productId, orderId: String(payload.id), variantId: item.variant_id ? String(item.variant_id) : undefined, email: payload.email, scheduledAt: due, tokenSecret: env.TOKEN_SECRET });
+          if (await productRequestsEnabled(db, productId)) await createRequest(db, { shopId: shop.rows[0].id, productId, orderId: String(payload.id), variantId: item.variant_id ? String(item.variant_id) : undefined, email: payload.email, scheduledAt: due, tokenSecret: env.TOKEN_SECRET });
         }
       }
       await markWebhookProcessed(db, job.deliveryId);

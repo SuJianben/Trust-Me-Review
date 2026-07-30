@@ -198,3 +198,43 @@
 - 收紧左侧导航宽度、分组间距、菜单行高和选中底色的圆角范围，使导航更紧凑。
 - `npm run typecheck`、`npm test`（8 项）和 `npm run build` 均通过。
 - 已发布 Worker 版本 `3206884e-fb9e-434a-a057-cae1933c1a76`。
+
+## 完整 Product management（补充）
+
+### 本次目标
+
+将 Product management 从“仅显示已有评论的商品”升级为完整 Shopify 商品目录管理页，使商家能同步全店商品、查看商品图片与评论数据，并控制每个商品是否参与后续自动邀评。
+
+### 修改范围
+
+- `db/migrations/0003_product_management.sql`（新增）
+- `src/features/products/catalog-service.ts`（新增）
+- `src/features/products/schemas.ts`（新增）
+- `src/features/products/admin-service.ts`
+- `src/worker.ts`
+- `src/admin/features/settings/ProductManagementPanel.tsx`
+- `src/admin/features/settings/types.ts`
+- `src/admin/features/settings/settings.css`
+- `tests/product-management.test.ts`（新增）
+
+### 新增与调整
+
+- 商品表新增商品图片、Shopify 商品状态、商品级邀评开关和最近目录同步时间。
+- Product management 增加 `Sync products`：使用店铺已授权的 Shopify 产品权限，每次同步 100 个商品并在前端自动继续下一页，支持大目录逐页同步。
+- 商品管理表展示缩略图、商品名称、Shopify 商品状态、已发布平均评分、评论数、商品级邀评状态和最近评论时间。
+- 增加 All products / Request active / Request inactive 筛选、商品实时关键词筛选和每页 50 条分页。
+- 每个商品可打开对应商品评论列表，也可启用/停用未来履约订单的自动邀评；已存在的邀评任务保持原样，避免擅自取消商家已安排的邀请。
+- 商品级开关更新会写入审核日志与不含个人内容的埋点。
+
+### 自检
+
+- Supabase 迁移已由商家在生产项目中成功执行。
+- `npm run typecheck`：通过。
+- `npm test`：4 个测试文件、10 个测试全部通过。
+- `npm run build`：通过。
+- Worker 健康检查、`/settings` 均返回 `200`；未携带后台身份令牌访问商品接口返回 `401`。
+- 已发布 Worker 版本 `6dba1288-0ea6-4e51-bfea-829c26c7db46`。
+
+### 遗留验证
+
+- 需在 Shopify 测试店的 Settings → Product management 点击一次 `Sync products`，确认目录、筛选、商品开关与跳转到对应评论列表的实际链路。
