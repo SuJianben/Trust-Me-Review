@@ -13,6 +13,7 @@ type Props = {
   request: AuthenticatedRequest;
   onError: (message: string) => void;
   onClearError: () => void;
+  productId?: string;
 };
 
 const statusTone: Record<ReviewStatus, "success" | "attention" | "critical" | "info"> = { pending: "attention", published: "success", hidden: "critical", deleted: "critical" };
@@ -24,7 +25,7 @@ const ratingOptions = [{ label: "All ratings", value: "all" }, ...[5, 4, 3, 2, 1
 function reviewStars(rating: number) { return "★".repeat(rating) + "☆".repeat(5 - rating); }
 function createdAt(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 
-export function ReviewsPanel({ request, onError, onClearError }: Props) {
+export function ReviewsPanel({ request, onError, onClearError, productId }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -46,6 +47,7 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
       if (source !== "all") query.set("source", source);
       if (rating !== "all") query.set("rating", rating);
       if (search) query.set("q", search);
+      if (productId) query.set("product", productId);
       const data = await request<ReviewResponse>(`/api/admin/reviews?${query}`);
       onClearError();
       setReviews(data.reviews); setTotal(data.total);
@@ -88,7 +90,7 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
 
   return <div className="tmr-admin-workspace">
     <div className="tmr-admin-heading">
-      <div><div className="tmr-eyebrow">REVIEW OPERATIONS</div><div className="tmr-title-row"><Text as="h1" variant="headingLg">Reviews</Text><Badge tone="info">{`${total} matching`}</Badge></div><Text as="p" tone="subdued">Moderate customer feedback and keep storefront reviews accurate.</Text></div>
+      <div><div className="tmr-eyebrow">REVIEW OPERATIONS</div><div className="tmr-title-row"><Text as="h1" variant="headingLg">Reviews</Text><Badge tone="info">{`${total} matching`}</Badge></div><Text as="p" tone="subdued">{productId ? `Showing reviews for Shopify product #${productId}.` : "Moderate customer feedback and keep storefront reviews accurate."}</Text></div>
       <Button onClick={() => void load()} loading={loading}>Refresh</Button>
     </div>
 

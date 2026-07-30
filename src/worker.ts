@@ -10,6 +10,7 @@ import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductTitles } from "./features/products/service";
+import { listAdminProducts } from "./features/products/admin-service";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
@@ -145,6 +146,7 @@ app.get("/api/admin/reviews", async (ctx) => {
   const source = ["public", "invitation"].includes(ctx.req.query("source") ?? "") ? ctx.req.query("source")! : null;
   const rating = ["1", "2", "3", "4", "5"].includes(ctx.req.query("rating") ?? "") ? Number(ctx.req.query("rating")) : null;
   const search = ctx.req.query("q")?.trim().slice(0, 120) || null;
+  const productId = ctx.req.query("product")?.trim().slice(0, 50) || null;
   await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
   const result = await withDb(ctx.env, async (db) => {
     const values: Array<string | number> = [admin.shopDomain];
@@ -153,10 +155,17 @@ app.get("/api/admin/reviews", async (ctx) => {
     if (source) { values.push(source); conditions.push(`r.source=$${values.length}`); }
     if (rating) { values.push(rating); conditions.push(`r.rating=$${values.length}`); }
     if (search) { values.push(search); conditions.push(`(r.author_name ilike '%' || $${values.length} || '%' or coalesce(r.title,'') ilike '%' || $${values.length} || '%' or r.body ilike '%' || $${values.length} || '%')`); }
+    if (productId) { values.push(productId); conditions.push(`p.shopify_product_id=$${values.length}`); }
     values.push((page - 1) * 30);
     return db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where ${conditions.join(" and ")} order by r.created_at desc limit 30 offset $${values.length}`, values);
   });
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
+});
+app.get("/api/admin/products", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  const products = await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain));
+  return ctx.json(products.rows);
 });
 app.patch("/api/admin/reviews/:id", async (ctx) => {
   const admin = ctx.get("admin")!; const input = moderationSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);

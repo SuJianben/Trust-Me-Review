@@ -5,7 +5,7 @@ import "./dashboard.css";
 import { AppNavigation } from "./components/AppNavigation";
 import { DashboardPanel } from "./features/dashboard/DashboardPanel";
 import { ReviewsWorkspace } from "./features/reviews/ReviewsWorkspace";
-import { SettingsPanel } from "./features/settings/SettingsPanel";
+import { SettingsWorkspace } from "./features/settings/SettingsWorkspace";
 
 type AppPage = "dashboard" | "reviews" | "settings";
 
@@ -41,7 +41,7 @@ export function Admin() {
             {error && <Layout.Section><Banner tone="critical" onDismiss={clearError}>{error}</Banner></Layout.Section>}
             {page === "dashboard" && <Layout.Section><DashboardPanel request={request} onError={setError} /></Layout.Section>}
             {page === "reviews" && <Layout.Section><ReviewsWorkspace request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
-            {page === "settings" && <Layout.Section><SettingsPanel request={request} onError={setError} /></Layout.Section>}
+            {page === "settings" && <Layout.Section><SettingsWorkspace request={request} onError={setError} /></Layout.Section>}
           </Layout>
         </Page>
       </div>

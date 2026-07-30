@@ -17,6 +17,7 @@ const reviewTabs = [
 
 export function ReviewsWorkspace({ request, onError, onClearError }: ReviewsWorkspaceProps) {
   const [selected, setSelected] = useState(0);
+  const productId = new URLSearchParams(location.search).get("product") ?? undefined;
 
   return (
     <>
@@ -24,7 +25,7 @@ export function ReviewsWorkspace({ request, onError, onClearError }: ReviewsWork
         <Tabs tabs={reviewTabs} selected={selected} onSelect={setSelected} />
       </div>
       {selected === 0 ? (
-        <ReviewsPanel request={request} onError={onError} onClearError={onClearError} />
+        <ReviewsPanel request={request} onError={onError} onClearError={onClearError} productId={productId} />
       ) : (
         <TestDeliveriesPanel request={request} onError={onError} />
       )}

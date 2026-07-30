@@ -154,3 +154,39 @@
 - Worker 根路径、`/reviews`、`/settings` 真实请求均返回 `200`。
 - 已发布 Worker 版本 `9f2eb6bb-beb7-49ee-b5cd-9a8f804f84e8`。
 - 自动 Shopify 后台视觉验证未能复用当前已登录测试店会话；需要在用户的测试店后台刷新一次，确认左侧导航呈现与点击跳转。
+
+## Settings 子级工作台（补充）
+
+### 本次目标
+
+将原有单张 Settings 表单升级为独立的设置子级工作台，采用“左侧设置分类 + 右侧当前内容”的运营后台结构，并实现真实的 Product management。
+
+### 修改范围
+
+- `src/admin/Admin.tsx`
+- `src/admin/features/settings/SettingsWorkspace.tsx`（新增）
+- `src/admin/features/settings/SettingsNavigation.tsx`（新增）
+- `src/admin/features/settings/SettingsPanel.tsx`
+- `src/admin/features/settings/ProductManagementPanel.tsx`（新增）
+- `src/admin/features/settings/types.ts`（新增）
+- `src/admin/features/settings/settings.css`（新增）
+- `src/features/products/admin-service.ts`（新增）
+- `src/worker.ts`
+- `src/admin/features/reviews/ReviewsWorkspace.tsx`
+- `src/admin/features/reviews/ReviewsPanel.tsx`
+
+### 新增与调整
+
+- Settings 页面改为两栏工作台，左侧按评论收集、前台显示和通用设置分组。
+- 已有真实设置按职责拆分为邀评计划、邀请邮件主题、前台显示及语言与通知页面，并继续使用原有保存接口。
+- Product management 读取当前店铺由评论或邀评流程产生的真实商品映射，展示评论数、已发布数、待审核数、平均评分、邀评数和最近评论时间。
+- 每个商品的 `View reviews` 可跳转到对应商品筛选后的 Reviews 页面；评论列表接口新增受参数化保护的商品筛选条件。
+- 没有后端能力的导入、Bundles、Widgets、优惠券、AI 等项目仅以分类文字展示，未伪造可执行功能。
+
+### 自检
+
+- `npm run typecheck`：通过。
+- `npm test`：3 个测试文件、8 个测试全部通过。
+- `npm run build`：通过。
+- `/settings` 与 `/reviews` 真实请求均返回 `200`；`/api/admin/products` 未携带 Shopify 身份令牌时返回 `401`，符合后台接口保护规则。
+- 已发布 Worker 版本 `6a48dd36-5c48-4e17-ba33-f932a1470a4d`。
