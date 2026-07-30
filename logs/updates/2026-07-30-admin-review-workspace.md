@@ -40,16 +40,11 @@
 
 - 需在已登录的 Shopify 测试店刷新后台，进行一次实际视觉与筛选/操作验收。
 
-## 筛选错误状态修复（补充）
+## Pending 状态切换修复（补充）
 
-- 通过 Shopify 测试店的真实嵌入式后台复现 `Pending` 筛选：Worker 请求成功，页面正确返回 `0 matching`。
-- 修复评论列表在后续成功请求后未清除旧错误条的问题；本次请求失败时仍会显示当前错误。
-- BUG 根因已同步更新至 `logs/bugs/2026-07-30-admin-status-filter-object-error.md`，避免将已排除的数据库错误当作结论保留。
-- 已在 `trust-me-review-test` 的真实 Shopify 嵌入式后台复验：重新加载后点击 `Pending`，显示 `0 matching` 和空状态，且不再出现红色错误条。
-
-## Pending 二次请求修复（补充二）
-
-- 进一步定位到错误并非数据库筛选失败：页面用内联 `onClearError` 回调在成功加载后触发父组件重新渲染，使 `ReviewsPanel` 的加载副作用再次执行。
-- 改用稳定的 `useCallback` 回调后，一次筛选只保留预期的加载链路，避免后续失败请求重新显示错误条。
-- 已执行 `npm run typecheck`、`npm test`（3 文件 / 7 测试）和 `npm run build`，均通过。
-- 已部署 Worker 版本 `b529511b-a4bf-4325-9641-35a971163b8c`，并在真实 Shopify 嵌入式后台点击 `Pending` 验证通过。
+- 复查后确认：顶部 `Pending` Tab 的查询可正常工作；真正失败的是评论行内状态下拉框选择 `Pending`。
+- 后端审核验证此前遗漏 `pending`，且把 `status` 设为必填，和后台实际支持的状态与单独置顶操作不一致。
+- 现已统一状态验证规则，支持 `pending`、`published`、`hidden`、`deleted`，并允许独立更新置顶状态。
+- 前端错误处理也已改为解析服务端结构化错误，避免显示 `[object Object]`。
+- 已发布 Worker 版本 `66a7ace1-3174-499c-a119-3685835f3e5e`。
+- 真实 Shopify 嵌入式后台已完成 `Published → Pending → Pending Tab 筛选 → Published` 全链路验证，未出现错误横幅。

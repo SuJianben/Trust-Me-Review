@@ -117,10 +117,10 @@ app.patch("/api/admin/reviews/:id", async (ctx) => {
   const updated = await withDb(ctx.env, async (db) => {
     const row = await db.query<{ id: string; shop_id: string }>(`
       update reviews r
-      set status = $1::review_status,
+      set status = coalesce($1::review_status, r.status),
           pinned = coalesce($2, pinned),
-          published_at = case when $1::review_status = 'published'::review_status and published_at is null then now() else published_at end,
-          deleted_at = case when $1::review_status = 'deleted'::review_status then now() else null end,
+          published_at = case when coalesce($1::review_status, r.status) = 'published'::review_status and published_at is null then now() else published_at end,
+          deleted_at = case when coalesce($1::review_status, r.status) = 'deleted'::review_status then now() else null end,
           updated_at = now()
       from shops s
       where r.shop_id = s.id and s.domain = $3 and r.id = $4
@@ -130,7 +130,8 @@ app.patch("/api/admin/reviews/:id", async (ctx) => {
     if (row.rowCount) await audit(db, row.rows[0].shop_id, `review_${input.data.status}`, "review", row.rows[0].id, admin.userId, { pinned: input.data.pinned });
     return row.rows[0];
   });
-  return updated ? ctx.json(updated) : ctx.json({ error: "Review not found" }, 404);
+  if (!updated) return ctx.json({ error: "Review not found" }, 404);
+  return ctx.json(updated);
 });
 app.post("/api/admin/reviews/:id/reply", async (ctx) => {
   const admin = ctx.get("admin")!; const input = replySchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);

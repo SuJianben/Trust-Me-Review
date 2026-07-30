@@ -7,6 +7,11 @@ export type AuthenticatedRequest = <T>(path: string, options?: RequestInit) => P
 function readableApiError(error: unknown) {
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
+  if (error && typeof error === "object" && "formErrors" in error && Array.isArray(error.formErrors) && typeof error.formErrors[0] === "string") return error.formErrors[0];
+  if (error && typeof error === "object" && "fieldErrors" in error && error.fieldErrors && typeof error.fieldErrors === "object") {
+    const firstFieldError = Object.values(error.fieldErrors).flat().find((value): value is string => typeof value === "string");
+    if (firstFieldError) return firstFieldError;
+  }
   return "Request failed. Please refresh and try again.";
 }
 
