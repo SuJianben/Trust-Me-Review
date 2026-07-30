@@ -70,7 +70,7 @@ export function SettingsPanel({ request, onError }: Props) {
 
   return <Card>
     <FormLayout>
-      <Text as="h2" variant="headingMd">Review request settings</Text>
+      <div className="tmr-panel-note"><Text as="h1" variant="headingLg">Review settings</Text><Text as="p" tone="subdued">Control how review requests and storefront badges behave.</Text></div>
       {saved && <Banner tone="success">Settings saved. New fulfilled orders will use these settings.</Banner>}
       <Checkbox label="Enable automatic review requests" checked={settings.request_enabled} onChange={(value) => setSettings((current) => ({ ...current, request_enabled: value }))} />
       <TextField label="Delay after fulfillment (days)" type="number" min={0} max={90} value={String(settings.request_delay_days)} onChange={(value) => setSettings((current) => ({ ...current, request_delay_days: Math.min(90, Math.max(0, Number(value) || 0)) }))} autoComplete="off" helpText="Use 0 for the development-store test: the invitation is queued immediately after fulfillment." disabled={loading} />

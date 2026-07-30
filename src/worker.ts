@@ -95,7 +95,10 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
 
 app.get("/api/admin/reviews", async (ctx) => {
   const admin = ctx.get("admin")!; const status = ctx.req.query("status") as ReviewStatus | undefined; const page = Math.max(1, Number(ctx.req.query("page") ?? 1));
-  const result = await withDb(ctx.env, async (db) => db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where s.domain=$1 and ($2::review_status is null or r.status=$2) order by r.created_at desc limit 30 offset $3`, [admin.shopDomain,status ?? null,(page-1)*30]));
+  const source = ["public", "invitation"].includes(ctx.req.query("source") ?? "") ? ctx.req.query("source") : null;
+  const rating = ["1", "2", "3", "4", "5"].includes(ctx.req.query("rating") ?? "") ? Number(ctx.req.query("rating")) : null;
+  const search = ctx.req.query("q")?.trim().slice(0, 120) || null;
+  const result = await withDb(ctx.env, async (db) => db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where s.domain=$1 and ($2::review_status is null or r.status=$2) and ($3::text is null or r.source=$3) and ($4::smallint is null or r.rating=$4) and ($5::text is null or r.author_name ilike '%' || $5 || '%' or coalesce(r.title,'') ilike '%' || $5 || '%' or r.body ilike '%' || $5 || '%') order by r.created_at desc limit 30 offset $6`, [admin.shopDomain,status ?? null,source,rating,search,(page-1)*30]));
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
 });
 app.patch("/api/admin/reviews/:id", async (ctx) => {
