@@ -8,7 +8,11 @@ type Review = {
   source: "public" | "invitation"; pinned: boolean; verified_purchase: boolean; reply_body?: string; created_at: string;
 };
 type ReviewResponse = { reviews: Review[]; total: number; page: number };
-type Props = { request: AuthenticatedRequest; onError: (message: string) => void };
+type Props = {
+  request: AuthenticatedRequest;
+  onError: (message: string) => void;
+  onClearError: () => void;
+};
 
 const statusTone: Record<ReviewStatus, "success" | "attention" | "critical" | "info"> = { pending: "attention", published: "success", hidden: "critical", deleted: "critical" };
 const statusOptions = [{ label: "All reviews", value: "all" }, { label: "Pending", value: "pending" }, { label: "Published", value: "published" }, { label: "Hidden", value: "hidden" }, { label: "Deleted", value: "deleted" }];
@@ -19,7 +23,7 @@ const ratingOptions = [{ label: "All ratings", value: "all" }, ...[5, 4, 3, 2, 1
 function reviewStars(rating: number) { return "★".repeat(rating) + "☆".repeat(5 - rating); }
 function createdAt(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 
-export function ReviewsPanel({ request, onError }: Props) {
+export function ReviewsPanel({ request, onError, onClearError }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -42,9 +46,10 @@ export function ReviewsPanel({ request, onError }: Props) {
       if (rating !== "all") query.set("rating", rating);
       if (search) query.set("q", search);
       const data = await request<ReviewResponse>(`/api/admin/reviews?${query}`);
+      onClearError();
       setReviews(data.reviews); setTotal(data.total);
     } catch (issue) { onError((issue as Error).message); } finally { setLoading(false); }
-  }, [onError, page, rating, request, search, source, status]);
+  }, [onClearError, onError, page, rating, request, search, source, status]);
 
   useEffect(() => { void load(); }, [load]);
 

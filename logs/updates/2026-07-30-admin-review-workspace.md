@@ -39,3 +39,10 @@
 ## 遗留验证
 
 - 需在已登录的 Shopify 测试店刷新后台，进行一次实际视觉与筛选/操作验收。
+
+## 筛选错误状态修复（补充）
+
+- 通过 Shopify 测试店的真实嵌入式后台复现 `Pending` 筛选：Worker 请求成功，页面正确返回 `0 matching`。
+- 修复评论列表在后续成功请求后未清除旧错误条的问题；本次请求失败时仍会显示当前错误。
+- BUG 根因已同步更新至 `logs/bugs/2026-07-30-admin-status-filter-object-error.md`，避免将已排除的数据库错误当作结论保留。
+- 已在 `trust-me-review-test` 的真实 Shopify 嵌入式后台复验：重新加载后点击 `Pending`，显示 `0 matching` 和空状态，且不再出现红色错误条。
