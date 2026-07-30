@@ -53,6 +53,21 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const keyword = searchInput.trim();
+    if (!keyword) {
+      setSearch("");
+      setPage(1);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSearch(keyword);
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const resetPage = (action: () => void) => { action(); setPage(1); };
   const updateReview = async (id: string, update: { status?: ReviewStatus; pinned?: boolean }) => {
     try { await request(`/api/admin/reviews/${id}`, { method: "PATCH", body: JSON.stringify(update) }); await load(); }
@@ -83,7 +98,7 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
       <div className="tmr-review-filters">
         <Select label="Source" labelHidden options={sourceOptions} value={source} onChange={(value) => resetPage(() => setSource(value))} />
         <Select label="Rating" labelHidden options={ratingOptions} value={rating} onChange={(value) => resetPage(() => setRating(value))} />
-        <div className="tmr-review-search"><TextField label="Search reviews" labelHidden value={searchInput} onChange={setSearchInput} placeholder="Search customer, title, or review" autoComplete="off" connectedRight={<Button accessibilityLabel="Search reviews" onClick={() => resetPage(() => setSearch(searchInput.trim()))}>Search</Button>} /></div>
+        <div className="tmr-review-search"><TextField label="Search reviews" labelHidden value={searchInput} onChange={setSearchInput} placeholder="Search customer, title, or review" autoComplete="off" /></div>
       </div>
 
       <div className="tmr-review-table" aria-busy={loading}>
