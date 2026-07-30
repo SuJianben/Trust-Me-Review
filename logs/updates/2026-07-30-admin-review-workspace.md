@@ -238,3 +238,11 @@
 ### 遗留验证
 
 - 需在 Shopify 测试店的 Settings → Product management 点击一次 `Sync products`，确认目录、筛选、商品开关与跳转到对应评论列表的实际链路。
+
+## Product management 范围收缩（补充）
+
+- 根据商家确认，Product management 不再承担全店商品目录同步；只显示至少有一条未删除评论的商品。
+- 已移除全量 `Sync products` 按钮和同步接口，避免无评论商品（包括仅有邀评记录的商品）进入该页面。
+- 商品级邀评开关、状态筛选、实时搜索、分页和跳转到对应评论列表继续保留。
+- `npm run typecheck`、`npm test`（10 项）和 `npm run build` 均通过。
+- 已发布 Worker 版本 `81354c0a-39f6-4f69-9064-bd8f06425b52`；健康检查与 `/settings` 返回 `200`，无身份令牌的商品接口返回 `401`。

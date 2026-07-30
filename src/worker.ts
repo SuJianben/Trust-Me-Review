@@ -11,7 +11,6 @@ import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySche
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductTitles } from "./features/products/service";
 import { listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
-import { syncProductCatalogPage } from "./features/products/catalog-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
@@ -169,13 +168,6 @@ app.get("/api/admin/products", async (ctx) => {
   const page = Math.max(1, Number(ctx.req.query("page") ?? 1) || 1);
   const search = (ctx.req.query("search") ?? "").trim().slice(0, 120);
   return ctx.json(await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain, filter, page, search)));
-});
-app.post("/api/admin/products/sync", async (ctx) => {
-  const admin = ctx.get("admin")!;
-  const input = await ctx.req.json().catch(() => ({})) as { cursor?: unknown };
-  const cursor = typeof input.cursor === "string" && input.cursor.length <= 1024 ? input.cursor : undefined;
-  const result = await withDb(ctx.env, (db) => syncProductCatalogPage(db, ctx.env, admin.shopDomain, cursor));
-  return ctx.json(result);
 });
 app.patch("/api/admin/products/:productId", async (ctx) => {
   const admin = ctx.get("admin")!;

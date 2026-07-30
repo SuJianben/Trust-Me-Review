@@ -24,7 +24,6 @@ export function ProductManagementPanel({ request, onError }: ProductManagementPa
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
 
   const load = useCallback(async (nextFilter = filter, nextPage = page, nextSearch = search) => {
@@ -50,22 +49,6 @@ export function ProductManagementPanel({ request, onError }: ProductManagementPa
     setSearch(nextSearch); setPage(1); void load(filter, 1, nextSearch);
   };
 
-  const syncCatalog = async () => {
-    setSyncing(true);
-    try {
-      let cursor: string | null | undefined;
-      do {
-        const result = await request<{ hasNextPage: boolean; nextCursor: string | null }>("/api/admin/products/sync", { method: "POST", body: JSON.stringify({ cursor }) });
-        cursor = result.hasNextPage ? result.nextCursor : null;
-      } while (cursor);
-      await load(filter, page, search);
-    } catch (issue) {
-      onError((issue as Error).message);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const changeRequestStatus = async (product: ManagedProduct) => {
     setToggling(product.shopify_product_id);
     try {
@@ -81,13 +64,12 @@ export function ProductManagementPanel({ request, onError }: ProductManagementPa
   const totalPages = Math.max(1, Math.ceil(data.total / 50));
 
   return (
-    <div className="tmr-settings-content tmr-product-management" aria-busy={loading || syncing}>
+    <div className="tmr-settings-content tmr-product-management" aria-busy={loading}>
       <div className="tmr-settings-content-heading">
         <div>
           <Text as="h1" variant="headingLg">Product management</Text>
-          <Text as="p" tone="subdued">Control which products can receive review requests after fulfilment.</Text>
+          <Text as="p" tone="subdued">Manage products that already have customer reviews.</Text>
         </div>
-        <Button loading={syncing} onClick={() => void syncCatalog()}>Sync products</Button>
       </div>
 
       <Card padding="0">
@@ -120,7 +102,7 @@ export function ProductManagementPanel({ request, onError }: ProductManagementPa
               </div>
             </div>
           ))}
-          {!loading && !data.products.length && <div className="tmr-settings-empty"><Text as="p">No products found. Sync products to load your Shopify catalogue.</Text></div>}
+          {!loading && !data.products.length && <div className="tmr-settings-empty"><Text as="p">No products with reviews found.</Text></div>}
         </div>
         <div className="tmr-product-pagination">
           <Text as="p" tone="subdued">Page {page} of {totalPages}</Text>

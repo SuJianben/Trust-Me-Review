@@ -52,7 +52,9 @@ export async function listAdminProducts(
       (select max(r.created_at) from reviews r where r.product_id = p.id and r.status <> 'deleted') as last_reviewed_at
     from products p
     join shops s on s.id = p.shop_id
-    where s.domain = $1 ${requestClause} ${searchClause}
+    where s.domain = $1
+      and exists (select 1 from reviews r where r.product_id=p.id and r.status <> 'deleted')
+      ${requestClause} ${searchClause}
     order by
       p.title_snapshot asc
     limit ${limitIndex} offset ${offsetIndex}
@@ -62,7 +64,8 @@ export async function listAdminProducts(
       count(*) filter (where p.request_enabled) as active_count,
       count(*) filter (where not p.request_enabled) as inactive_count
     from products p join shops s on s.id=p.shop_id
-    where s.domain=$1`, [shopDomain]);
+    where s.domain=$1
+      and exists (select 1 from reviews r where r.product_id=p.id and r.status <> 'deleted')`, [shopDomain]);
   const row = counts.rows[0];
   return {
     products: products.rows,
