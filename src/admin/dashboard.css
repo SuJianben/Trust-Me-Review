@@ -1,6 +1,9 @@
 .tmr-dashboard {
   display: grid;
   gap: 1.25rem;
+  width: 100%;
+  max-width: 66rem;
+  margin: 0 auto;
 }
 
 .tmr-dashboard-hero {
@@ -111,67 +114,6 @@
 
 .tmr-dashboard-status-item .Polaris-Text--root:last-child {
   font-size: .82rem;
-}
-
-.tmr-dashboard-work-list {
-  display: grid;
-  gap: 1rem;
-}
-
-.tmr-dashboard-work-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 12.5rem;
-  min-height: 10.75rem;
-  overflow: hidden;
-  border: 1px solid var(--tmr-line);
-  border-radius: .75rem;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
-}
-
-.tmr-dashboard-work-content {
-  display: grid;
-  align-content: center;
-  justify-items: start;
-  gap: .8rem;
-  padding: 1.35rem 1rem;
-}
-
-.tmr-dashboard-work-content .Polaris-Text--root {
-  margin: 0;
-  max-width: 44rem;
-}
-
-.tmr-dashboard-work-content .Polaris-Text--root:nth-child(2) {
-  color: #334155;
-}
-
-.tmr-dashboard-work-visual {
-  display: grid;
-  place-content: center;
-  align-items: center;
-  background: #d7effc;
-  color: #075985;
-  text-align: center;
-}
-
-.tmr-dashboard-work-card--requests .tmr-dashboard-work-visual {
-  background: #d9f4ef;
-  color: #0f766e;
-}
-
-.tmr-dashboard-work-visual span {
-  font-size: 3rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.tmr-dashboard-work-visual small {
-  margin-top: .3rem;
-  font-size: .82rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
 }
 
 .tmr-dashboard-columns {
@@ -302,12 +244,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tmr-dashboard-work-card,
   .tmr-dashboard-columns {
     grid-template-columns: 1fr;
-  }
-
-  .tmr-dashboard-work-visual {
-    min-height: 5.5rem;
   }
 }

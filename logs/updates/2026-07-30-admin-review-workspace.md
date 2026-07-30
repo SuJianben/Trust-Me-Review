@@ -114,3 +114,11 @@
 - `npm run build`：通过。
 - 已发布 Worker 版本 `44266b05-eca3-429f-b163-47e27ab6c7bb`。
 - 已在真实 Shopify 测试店验证 Dashboard 呈现，并完成 `Dashboard → Reviews → Dashboard` 与 `Dashboard → Review requests → Dashboard` 两条跳转链路。
+
+## Dashboard 精简布局（补充）
+
+- 根据验收反馈，移除“Moderate customer feedback”和“Collect verified reviews”两张操作引导卡。
+- Dashboard 内容区调整为居中且最大宽度约 1056px，避免在宽屏 Shopify 后台中横向拉得过大。
+- 保留真实概览、状态、热门商品和最近评论数据，不影响其他后台功能。
+- `npm run typecheck`、`npm test`（8 项）和 `npm run build` 均通过。
+- 已发布 Worker 版本 `221cce62-c10d-4b7e-a906-89bfcc036d4c`。

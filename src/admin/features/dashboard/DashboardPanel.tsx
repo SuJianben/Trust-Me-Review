@@ -6,8 +6,6 @@ import type { DashboardData, DashboardMetric, DashboardReview } from "./types";
 type DashboardPanelProps = {
   request: AuthenticatedRequest;
   onError: (message: string) => void;
-  onOpenReviews: () => void;
-  onOpenDeliveries: () => void;
 };
 
 const emptyMetrics: DashboardMetric = {
@@ -41,8 +39,6 @@ function statusCopy(metrics: DashboardMetric) {
 export function DashboardPanel({
   request,
   onError,
-  onOpenReviews,
-  onOpenDeliveries,
 }: DashboardPanelProps) {
   const [data, setData] = useState<DashboardData>({
     metrics: emptyMetrics,
@@ -136,32 +132,6 @@ export function DashboardPanel({
         </div>
       </section>
 
-      <section className="tmr-dashboard-work-list" aria-label="Review operations">
-        <article className="tmr-dashboard-work-card tmr-dashboard-work-card--reviews">
-          <div className="tmr-dashboard-work-content">
-            <Text as="h2" variant="headingMd">Moderate customer feedback</Text>
-            <Text as="p">Review pending feedback, publish approved reviews, and reply to customers from one place.</Text>
-            <Button onClick={onOpenReviews}>Manage reviews</Button>
-          </div>
-          <div className="tmr-dashboard-work-visual" aria-hidden="true">
-            <span>{metrics.pending_reviews}</span>
-            <small>pending</small>
-          </div>
-        </article>
-
-        <article className="tmr-dashboard-work-card tmr-dashboard-work-card--requests">
-          <div className="tmr-dashboard-work-content">
-            <Text as="h2" variant="headingMd">Collect verified reviews</Text>
-            <Text as="p">Track generated test invitations and open the secure review links created after fulfilment.</Text>
-            <Button onClick={onOpenDeliveries}>Review requests</Button>
-          </div>
-          <div className="tmr-dashboard-work-visual" aria-hidden="true">
-            <span>{metrics.sent_requests}</span>
-            <small>sent</small>
-          </div>
-        </article>
-      </section>
-
       <div className="tmr-dashboard-columns">
         <section className="tmr-dashboard-data-panel" aria-labelledby="top-products-title">
           <div className="tmr-dashboard-panel-heading">
@@ -183,7 +153,6 @@ export function DashboardPanel({
             ))}
             {!loading && !data.topProducts.length && <div className="tmr-dashboard-empty">No product review data yet.</div>}
           </div>
-          <button className="tmr-dashboard-panel-link" type="button" onClick={onOpenReviews}>View reviews</button>
         </section>
 
         <section className="tmr-dashboard-data-panel" aria-labelledby="recent-reviews-title">
@@ -208,7 +177,6 @@ export function DashboardPanel({
             ))}
             {!loading && !data.recentReviews.length && <div className="tmr-dashboard-empty">No reviews have been received yet.</div>}
           </div>
-          <button className="tmr-dashboard-panel-link" type="button" onClick={onOpenReviews}>View all reviews</button>
         </section>
       </div>
     </div>
