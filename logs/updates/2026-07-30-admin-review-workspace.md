@@ -46,3 +46,10 @@
 - 修复评论列表在后续成功请求后未清除旧错误条的问题；本次请求失败时仍会显示当前错误。
 - BUG 根因已同步更新至 `logs/bugs/2026-07-30-admin-status-filter-object-error.md`，避免将已排除的数据库错误当作结论保留。
 - 已在 `trust-me-review-test` 的真实 Shopify 嵌入式后台复验：重新加载后点击 `Pending`，显示 `0 matching` 和空状态，且不再出现红色错误条。
+
+## Pending 二次请求修复（补充二）
+
+- 进一步定位到错误并非数据库筛选失败：页面用内联 `onClearError` 回调在成功加载后触发父组件重新渲染，使 `ReviewsPanel` 的加载副作用再次执行。
+- 改用稳定的 `useCallback` 回调后，一次筛选只保留预期的加载链路，避免后续失败请求重新显示错误条。
+- 已执行 `npm run typecheck`、`npm test`（3 文件 / 7 测试）和 `npm run build`，均通过。
+- 已部署 Worker 版本 `b529511b-a4bf-4325-9641-35a971163b8c`，并在真实 Shopify 嵌入式后台点击 `Pending` 验证通过。
