@@ -94,11 +94,22 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
 });
 
 app.get("/api/admin/reviews", async (ctx) => {
-  const admin = ctx.get("admin")!; const status = ctx.req.query("status") as ReviewStatus | undefined; const page = Math.max(1, Number(ctx.req.query("page") ?? 1));
-  const source = ["public", "invitation"].includes(ctx.req.query("source") ?? "") ? ctx.req.query("source") : null;
+  const admin = ctx.get("admin")!; const page = Math.max(1, Number(ctx.req.query("page") ?? 1));
+  const requestedStatus = ctx.req.query("status");
+  const status = ["pending", "published", "hidden", "deleted"].includes(requestedStatus ?? "") ? requestedStatus as ReviewStatus : null;
+  const source = ["public", "invitation"].includes(ctx.req.query("source") ?? "") ? ctx.req.query("source")! : null;
   const rating = ["1", "2", "3", "4", "5"].includes(ctx.req.query("rating") ?? "") ? Number(ctx.req.query("rating")) : null;
   const search = ctx.req.query("q")?.trim().slice(0, 120) || null;
-  const result = await withDb(ctx.env, async (db) => db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where s.domain=$1 and ($2::review_status is null or r.status=$2) and ($3::text is null or r.source=$3) and ($4::smallint is null or r.rating=$4) and ($5::text is null or r.author_name ilike '%' || $5 || '%' or coalesce(r.title,'') ilike '%' || $5 || '%' or r.body ilike '%' || $5 || '%') order by r.created_at desc limit 30 offset $6`, [admin.shopDomain,status ?? null,source,rating,search,(page-1)*30]));
+  const result = await withDb(ctx.env, async (db) => {
+    const values: Array<string | number> = [admin.shopDomain];
+    const conditions = ["s.domain=$1"];
+    if (status) { values.push(status); conditions.push(`r.status=$${values.length}::review_status`); }
+    if (source) { values.push(source); conditions.push(`r.source=$${values.length}`); }
+    if (rating) { values.push(rating); conditions.push(`r.rating=$${values.length}`); }
+    if (search) { values.push(search); conditions.push(`(r.author_name ilike '%' || $${values.length} || '%' or coalesce(r.title,'') ilike '%' || $${values.length} || '%' or r.body ilike '%' || $${values.length} || '%')`); }
+    values.push((page - 1) * 30);
+    return db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where ${conditions.join(" and ")} order by r.created_at desc limit 30 offset $${values.length}`, values);
+  });
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
 });
 app.patch("/api/admin/reviews/:id", async (ctx) => {
