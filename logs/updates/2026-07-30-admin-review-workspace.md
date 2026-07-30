@@ -81,3 +81,36 @@
 - `npm run build`：通过。
 - 已发布 Worker 版本 `c5210da9-0eb6-4536-8c99-dd31879697dc`。
 - 已在 Shopify 测试店真实验证：Dashboard 默认打开、指标正确显示，`Manage reviews` 可进入评论管理页。
+
+## 主级 Dashboard 布局完成（补充）
+
+### 本次目标
+
+以 Judge.me 数据面板的信息层级为参考，完成 Trust Me Review 主级 Dashboard 的正式运营布局；只复用可验证的真实店铺数据，不复制 Judge.me 品牌、广告内容或虚假的功能入口。
+
+### 修改范围
+
+- `src/admin/features/dashboard/DashboardPanel.tsx`
+- `src/admin/dashboard.css`
+- `src/admin/Admin.tsx`
+
+### 新增与调整
+
+- 增加蓝色概览横幅、数据摘要区、状态区、两项真实待办入口，以及“热门商品 / 最近评论”双栏数据区。
+- 五项摘要均取自当前店铺真实数据：评论总数、平均评分、已发送邀评、已发布评论、待审核评论。
+- 状态区展示真实的待审核、已发布、待发送和已发送数量；无待审核时显示已处理完成。
+- `Manage reviews` 跳转至评论管理，`Review requests` 跳转至邀评记录；两个入口不再是静态展示按钮。
+- 样式独立集中在 `dashboard.css`，并补充平板与手机尺寸下的单列排版。
+
+### 影响范围
+
+- 仅调整主级 Dashboard 的展示与页面内导航，不改变评论、邀评、审核或设置的业务逻辑。
+- 不新增广告卡片、订阅引导、虚构指标或无对应后端能力的按钮。
+
+### 自检
+
+- `npm run typecheck`：通过。
+- `npm test`：3 个测试文件、8 个测试全部通过。
+- `npm run build`：通过。
+- 已发布 Worker 版本 `44266b05-eca3-429f-b163-47e27ab6c7bb`。
+- 已在真实 Shopify 测试店验证 Dashboard 呈现，并完成 `Dashboard → Reviews → Dashboard` 与 `Dashboard → Review requests → Dashboard` 两条跳转链路。

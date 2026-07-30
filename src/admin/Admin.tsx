@@ -20,6 +20,7 @@ export function Admin() {
   const request = useAuthenticatedApi();
   const clearError = useCallback(() => setError(""), []);
   const openReviews = useCallback(() => setTab(1), []);
+  const openDeliveries = useCallback(() => setTab(2), []);
 
   return (
     <AppProvider i18n={{}}>
@@ -41,7 +42,7 @@ export function Admin() {
               <div className="tmr-app-tabs"><Tabs tabs={tabs} selected={tab} onSelect={setTab} /></div>
             </Layout.Section>
             {error && <Layout.Section><Banner tone="critical" onDismiss={clearError}>{error}</Banner></Layout.Section>}
-            {tab === 0 && <Layout.Section><DashboardPanel request={request} onError={setError} onOpenReviews={openReviews} /></Layout.Section>}
+            {tab === 0 && <Layout.Section><DashboardPanel request={request} onError={setError} onOpenReviews={openReviews} onOpenDeliveries={openDeliveries} /></Layout.Section>}
             {tab === 1 && <Layout.Section><ReviewsPanel request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
             {tab === 2 && <Layout.Section><TestDeliveriesPanel request={request} onError={setError} /></Layout.Section>}
             {tab === 3 && <Layout.Section><SettingsPanel request={request} onError={setError} /></Layout.Section>}
