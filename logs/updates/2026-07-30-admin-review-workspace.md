@@ -65,3 +65,19 @@
 - 标题临时无法读取时，安全回退显示 `Product #商品ID`，不会丢失评论归属。
 - 已在真实 Shopify 后台验证历史评论显示 `Review Test Product` 与 `Gift Card`，无错误横幅。
 - 已发布 Worker 版本 `9a15dc1e-dada-40e8-a6f0-07b63a12f09c`，Theme App Extension 已发布版本 `trust-me-review-7`。
+
+## 主级 Dashboard（补充）
+
+- 根据新的信息架构，应用默认首页改为主级 Dashboard；后续将逐步整理为 Reviews、Settings、Resources 三个子级。
+- 本轮只实现 Dashboard，不提前改动 Reviews、Settings、Resources 的内部功能结构。
+- Dashboard 仅展示当前店铺的真实数据：有效评论数、已发布评论数、待审核数、已发布评论平均分、已发送邀评数、待发送邀评数、热门商品和最近评论。
+- 未加入广告、订阅、增长推广或任何无法由当前数据支撑的指标。
+- 聚合查询使用独立子查询计算评论和邀评任务，避免两个表联表统计时互相放大计数。
+
+### 自检
+
+- `npm run typecheck`：通过。
+- `npm test`：3 个测试文件、8 个测试全部通过。
+- `npm run build`：通过。
+- 已发布 Worker 版本 `c5210da9-0eb6-4536-8c99-dd31879697dc`。
+- 已在 Shopify 测试店真实验证：Dashboard 默认打开、指标正确显示，`Manage reviews` 可进入评论管理页。

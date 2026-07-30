@@ -94,6 +94,50 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
   if (!created) return ctx.json({ error: "Invitation is invalid or already used" }, 404); return ctx.json({ id: created.id, status: "pending", verifiedPurchase: true }, 201);
 });
 
+app.get("/api/admin/dashboard", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  const data = await withDb(ctx.env, async (db) => {
+    const metrics = await db.query<{
+      total_reviews: number; published_reviews: number; pending_reviews: number;
+      average_rating: number; sent_requests: number; scheduled_requests: number;
+    }>(`
+      select
+        (select count(*)::int from reviews r where r.shop_id = s.id and r.status <> 'deleted') as total_reviews,
+        (select count(*)::int from reviews r where r.shop_id = s.id and r.status = 'published') as published_reviews,
+        (select count(*)::int from reviews r where r.shop_id = s.id and r.status = 'pending') as pending_reviews,
+        (select coalesce(avg(r.rating), 0)::float8 from reviews r where r.shop_id = s.id and r.status = 'published') as average_rating,
+        (select count(*)::int from review_requests rr where rr.shop_id = s.id and rr.status in ('sent', 'submitted')) as sent_requests,
+        (select count(*)::int from review_requests rr where rr.shop_id = s.id and rr.status = 'scheduled') as scheduled_requests
+      from shops s where s.domain = $1
+    `, [admin.shopDomain]);
+    const topProducts = await db.query(`
+      select p.shopify_product_id, p.title_snapshot,
+        count(r.id) filter (where r.status <> 'deleted')::int as review_count,
+        coalesce(avg(r.rating) filter (where r.status = 'published'), 0)::float8 as average_rating
+      from products p
+      join shops s on s.id = p.shop_id
+      left join reviews r on r.product_id = p.id
+      where s.domain = $1
+      group by p.id, p.shopify_product_id, p.title_snapshot
+      having count(r.id) filter (where r.status <> 'deleted') > 0
+      order by count(r.id) filter (where r.status <> 'deleted') desc, p.title_snapshot asc
+      limit 5
+    `, [admin.shopDomain]);
+    const recentReviews = await db.query(`
+      select r.id, r.author_name, r.rating, r.title, r.body, r.status, r.verified_purchase, r.created_at, p.title_snapshot
+      from reviews r
+      join shops s on s.id = r.shop_id
+      join products p on p.id = r.product_id
+      where s.domain = $1 and r.status <> 'deleted'
+      order by r.created_at desc
+      limit 5
+    `, [admin.shopDomain]);
+    return { metrics: metrics.rows[0], topProducts: topProducts.rows, recentReviews: recentReviews.rows };
+  });
+  return ctx.json(data);
+});
+
 app.get("/api/admin/reviews", async (ctx) => {
   const admin = ctx.get("admin")!; const page = Math.max(1, Number(ctx.req.query("page") ?? 1));
   const requestedStatus = ctx.req.query("status");
