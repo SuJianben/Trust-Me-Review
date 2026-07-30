@@ -28,6 +28,8 @@
 .tmr-product-trend-tooltip::after { position: absolute; bottom: -.28rem; left: 50%; width: .55rem; height: .55rem; background: #263238; content: ""; transform: translateX(-50%) rotate(45deg); }
 .tmr-product-trend-tooltip strong, .tmr-product-trend-tooltip span { position: relative; z-index: 1; }
 .tmr-product-trend-tooltip strong::before { display: inline-block; width: .5rem; height: .5rem; margin-right: .32rem; border: 1px solid #6de0dc; background: #168787; content: ""; vertical-align: -.04rem; }
+.tmr-product-trend-tooltip--below { transform: translate(-50%, .55rem); }
+.tmr-product-trend-tooltip--below::after { top: -.28rem; bottom: auto; }
 .tmr-product-detail-page .tmr-admin-workspace { gap: 0; }
 .tmr-product-detail-page .tmr-admin-heading { display: none; }
 

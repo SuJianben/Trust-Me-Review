@@ -43,10 +43,15 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
     }).join(" ");
   }, [maxReviews, points]);
 
-  const tooltipPosition = hoveredPoint ? {
-    left: `${(hoveredPoint.index / Math.max(1, points.length - 1)) * 100}%`,
-    top: `${(170 - ((hoveredPoint.point.review_count / maxReviews) * 150)) / 190 * 100}%`,
+  const tooltipPoint = hoveredPoint ? {
+    xPercent: (hoveredPoint.index / Math.max(1, points.length - 1)) * 100,
+    y: 170 - ((hoveredPoint.point.review_count / maxReviews) * 150),
+  } : null;
+  const tooltipPosition = tooltipPoint ? {
+    left: `clamp(4.5rem, ${tooltipPoint.xPercent}%, calc(100% - 4.5rem))`,
+    top: `${tooltipPoint.y / 190 * 100}%`,
   } : undefined;
+  const tooltipOpensBelow = Boolean(tooltipPoint && tooltipPoint.y < 62);
 
   return <div className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
     <svg viewBox="0 0 720 190" role="img">
@@ -59,10 +64,13 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
       {points.map((point, index) => {
         const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
         const y = 170 - ((point.review_count / maxReviews) * 150);
-        return <g className="tmr-product-trend-point" key={point.month} onBlur={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint({ point, index })} onMouseEnter={() => setHoveredPoint({ point, index })} tabIndex={0}><circle cx={x} cy={y} r="5" /><text className="tmr-product-trend-month" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text></g>;
+        return <g className="tmr-product-trend-point" key={point.month}>
+          <circle aria-label={`${monthLabel(point.month)}: ${point.review_count} review(s)`} cx={x} cy={y} onBlur={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint({ point, index })} onMouseEnter={() => setHoveredPoint({ point, index })} r="5" tabIndex={0} />
+          <text className="tmr-product-trend-month" pointerEvents="none" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text>
+        </g>;
       })}
     </svg>
-    {hoveredPoint && <div className="tmr-product-trend-tooltip" role="status" style={tooltipPosition}>
+    {hoveredPoint && <div className={`tmr-product-trend-tooltip${tooltipOpensBelow ? " tmr-product-trend-tooltip--below" : ""}`} role="status" style={tooltipPosition}>
       <strong>{hoveredPoint.point.review_count} review(s)</strong>
       <span>{totalReviews ? `${Math.round((hoveredPoint.point.review_count / totalReviews) * 100)}%` : "0%"}</span>
     </div>}
