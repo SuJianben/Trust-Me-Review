@@ -256,3 +256,10 @@
 - 工作区最大宽度调整至约 1230px；商品表格增大列间距、行高、缩略图和操作区，避免小气的拥挤排版。
 - `npm run typecheck`、`npm test`（10 项）和 `npm run build` 均通过；`/settings` 返回 `200`。
 - 已发布 Worker 版本 `37c78a80-0dd5-4f73-8d7f-990ecc43a97d`。
+
+## Settings 内容区垂直布局修复（补充）
+
+- 修复左侧导航变高后，CSS Grid 将右侧内容容器同步拉高，导致标题与商品表格被分散到上下两端的问题。
+- 工作区与右侧内容区均改为按内容高度排列，Product management 表格现在紧接标题和说明显示。
+- `npm run typecheck`、`npm test`（10 项）和 `npm run build` 均通过；`/settings` 返回 `200`。
+- 已发布 Worker 版本 `7fb33829-ec81-4a87-8ed8-c2b740cad4b3`。
