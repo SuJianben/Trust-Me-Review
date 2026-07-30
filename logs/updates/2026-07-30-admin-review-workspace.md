@@ -279,3 +279,10 @@
 - 新增后台接口 `GET /api/admin/products/:productId`，查询强制以当前店铺域名和“至少一条未删除评论”限制数据范围。
 - `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；详情页面路径返回 `200`，未携带 Shopify 后台身份令牌访问详情数据接口返回 `401`。
 - 已发布 Worker 版本 `4e1faeb0-7687-4f53-b02f-6b4af87bf7fc`。
+
+## 单商品详情页保留 Settings 侧栏（修复）
+
+- 将单商品详情页装配回 Settings 工作台，不再绕开左侧导航。
+- 进入详情时左侧 Product management 保持选中；返回按钮回到 `Settings → Product management` 列表。
+- `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；详情页与返回列表路径均返回 `200`。
+- 已发布 Worker 版本 `f4cab785-47fb-47e4-92f8-d57a68f3b610`。

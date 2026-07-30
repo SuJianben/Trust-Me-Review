@@ -4,7 +4,6 @@ import { useAuthenticatedApi } from "./api";
 import "./dashboard.css";
 import { AppNavigation } from "./components/AppNavigation";
 import { DashboardPanel } from "./features/dashboard/DashboardPanel";
-import { ProductDetailPanel } from "./features/products/ProductDetailPanel";
 import { ReviewsWorkspace } from "./features/reviews/ReviewsWorkspace";
 import { SettingsWorkspace } from "./features/settings/SettingsWorkspace";
 
@@ -44,8 +43,8 @@ export function Admin() {
             {error && <Layout.Section><Banner tone="critical" onDismiss={clearError}>{error}</Banner></Layout.Section>}
             {page === "dashboard" && <Layout.Section><DashboardPanel request={request} onError={setError} /></Layout.Section>}
             {page === "reviews" && <Layout.Section><ReviewsWorkspace request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
-            {page === "settings" && <Layout.Section><SettingsWorkspace request={request} onError={setError} /></Layout.Section>}
-            {page === "product" && <Layout.Section><ProductDetailPanel productId={productId} request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
+            {page === "settings" && <Layout.Section><SettingsWorkspace request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
+            {page === "product" && <Layout.Section><SettingsWorkspace productId={productId} request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
           </Layout>
         </Page>
       </div>

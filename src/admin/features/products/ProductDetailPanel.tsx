@@ -77,11 +77,11 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
   useEffect(() => { void load(); }, [load]);
 
   if (!product && loading) return <div className="tmr-product-detail-loading"><Text as="p" tone="subdued">Loading product details…</Text></div>;
-  if (!product) return <div className="tmr-product-detail-loading"><Button url="/settings">Back to Product management</Button></div>;
+  if (!product) return <div className="tmr-product-detail-loading"><Button url="/settings?section=product-management">Back to Product management</Button></div>;
 
   return <div className="tmr-product-detail-page">
     <header className="tmr-product-detail-header">
-      <Button accessibilityLabel="Back to Product management" icon={() => <span aria-hidden="true">←</span>} url="/settings" />
+      <Button accessibilityLabel="Back to Product management" icon={() => <span aria-hidden="true">←</span>} url="/settings?section=product-management" />
       {product.image_url ? <img alt="" className="tmr-product-detail-image" src={product.image_url} /> : <span className="tmr-product-detail-image tmr-product-detail-placeholder" aria-hidden="true" />}
       <div><Text as="h1" variant="headingLg">{productLabel(product)}</Text><Text as="p" tone="subdued">Shopify product #{product.shopify_product_id}</Text></div>
       <Badge tone={product.request_enabled ? "success" : "critical"}>{product.request_enabled ? "Requests active" : "Requests inactive"}</Badge>
