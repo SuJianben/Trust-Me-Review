@@ -6,6 +6,7 @@ type ReviewStatus = "pending" | "published" | "hidden" | "deleted";
 type Review = {
   id: string; rating: number; author_name: string; title: string | null; body: string; status: ReviewStatus;
   source: "public" | "invitation"; pinned: boolean; verified_purchase: boolean; reply_body?: string; created_at: string;
+  shopify_product_id: string; title_snapshot: string;
 };
 type ReviewResponse = { reviews: Review[]; total: number; page: number };
 type Props = {
@@ -104,7 +105,7 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
       <div className="tmr-review-table" aria-busy={loading}>
         <div className="tmr-review-table-head"><span>Customer</span><span>Created</span><span>Rating & review</span><span>Status</span><span>Actions</span></div>
         {reviews.map((review) => <article className="tmr-review-row" key={review.id}>
-          <div className="tmr-customer-cell"><Text as="p" fontWeight="semibold">{review.author_name}</Text><Text as="p" tone="subdued">{review.source === "invitation" ? "Verified invitation" : "Public form"}{review.verified_purchase ? " · Verified" : ""}</Text></div>
+          <div className="tmr-customer-cell"><Text as="p" fontWeight="semibold">{review.author_name}</Text><Text as="p" tone="subdued">{review.source === "invitation" ? "Verified invitation" : "Public form"}{review.verified_purchase ? " · Verified" : ""}</Text><Text as="p" tone="subdued">Product: {review.title_snapshot || `Product #${review.shopify_product_id}`}</Text></div>
           <Text as="p" tone="subdued">{createdAt(review.created_at)}</Text>
           <div className="tmr-review-content"><div className="tmr-rating">{reviewStars(review.rating)}</div>{review.title && <Text as="p" fontWeight="semibold">{review.title}</Text>}<Text as="p">{review.body}</Text>{review.reply_body && <Text as="p" tone="subdued">Store reply: {review.reply_body}</Text>}</div>
           <div className="tmr-status-cell"><Badge tone={statusTone[review.status]}>{review.status}</Badge><Select label={`Status for ${review.author_name}`} labelHidden options={reviewStatusOptions} value={review.status} onChange={(value) => void updateReview(review.id, { status: value as ReviewStatus })} /></div>

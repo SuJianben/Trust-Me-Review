@@ -3,8 +3,8 @@ import { sha256 } from "../../lib/crypto";
 
 const prohibited = ["viagra", "casino", "click here"];
 export function hasProhibitedText(value: string) { const plain = value.toLowerCase(); return prohibited.some((word) => plain.includes(word)); }
-export async function ensureProduct(client: pg.Client, shopId: string, shopifyProductId: string) {
-  const result = await client.query<{ id: string }>("insert into products(shop_id,shopify_product_id) values($1,$2) on conflict(shop_id,shopify_product_id) do update set shopify_product_id=excluded.shopify_product_id returning id", [shopId, shopifyProductId]);
+export async function ensureProduct(client: pg.Client, shopId: string, shopifyProductId: string, title?: string) {
+  const result = await client.query<{ id: string }>("insert into products(shop_id,shopify_product_id,title_snapshot) values($1,$2,$3) on conflict(shop_id,shopify_product_id) do update set title_snapshot=case when excluded.title_snapshot <> '' then excluded.title_snapshot else products.title_snapshot end returning id", [shopId, shopifyProductId, title?.trim() ?? ""]);
   return result.rows[0].id;
 }
 export async function reservePublicSubmission(client: pg.Client, shopId: string, productId: string, ip: string) {

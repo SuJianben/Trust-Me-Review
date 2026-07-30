@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const publicReviewSchema = z.object({ shopDomain: z.string().min(3), productId: z.string().min(1), rating: z.number().int().min(1).max(5), title: z.string().max(120).optional(), body: z.string().trim().min(10).max(3000), authorName: z.string().trim().min(1).max(120), website: z.string().max(0).optional(), turnstileToken: z.string().min(1) });
+export const publicReviewSchema = z.object({ shopDomain: z.string().min(3), productId: z.string().min(1), productTitle: z.string().trim().max(255).optional(), rating: z.number().int().min(1).max(5), title: z.string().max(120).optional(), body: z.string().trim().min(10).max(3000), authorName: z.string().trim().min(1).max(120), website: z.string().max(0).optional(), turnstileToken: z.string().min(1) });
 export const invitationReviewSchema = publicReviewSchema.omit({ shopDomain: true, productId: true, turnstileToken: true, website: true });
 export const reviewStatusSchema = z.enum(["pending", "published", "hidden", "deleted"]);
 export const moderationSchema = z.object({ status: reviewStatusSchema.optional(), pinned: z.boolean().optional() }).refine(

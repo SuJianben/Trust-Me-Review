@@ -82,7 +82,7 @@ function initializeWidget(widget) {
     try {
       const response = await fetch(`${widget.dataset.api.replace(/\/$/, "")}/api/storefront/reviews`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ shopDomain: widget.dataset.shop, productId: widget.dataset.productId, rating: Number(values.rating), authorName: values.authorName, title: values.title, body: values.body, website: values.website, turnstileToken: token }),
+        body: JSON.stringify({ shopDomain: widget.dataset.shop, productId: widget.dataset.productId, productTitle: widget.dataset.productTitle, rating: Number(values.rating), authorName: values.authorName, title: values.title, body: values.body, website: values.website, turnstileToken: token }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

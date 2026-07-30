@@ -9,6 +9,7 @@ import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/aut
 import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
+import { refreshMissingProductTitles } from "./features/products/service";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
@@ -68,7 +69,7 @@ app.post("/api/storefront/reviews", async (ctx) => {
   if (!(await verifyTurnstile(input.data.turnstileToken, remoteIp, ctx.env))) return ctx.json({ error: "Bot verification failed" }, 400);
   const result = await withDb(ctx.env, async (db) => {
     const shop = await db.query<{ id: string }>("select id from shops where domain=$1 and status='active'", [input.data.shopDomain]); if (!shop.rowCount) return null;
-    const productId = await ensureProduct(db, shop.rows[0].id, input.data.productId); if (!(await reservePublicSubmission(db, shop.rows[0].id, productId, remoteIp))) throw new Error("RATE_LIMITED");
+    const productId = await ensureProduct(db, shop.rows[0].id, input.data.productId, input.data.productTitle); if (!(await reservePublicSubmission(db, shop.rows[0].id, productId, remoteIp))) throw new Error("RATE_LIMITED");
     const duplicate = await db.query("select 1 from reviews where shop_id=$1 and product_id=$2 and body=$3 and status <> 'deleted'", [shop.rows[0].id, productId, input.data.body]); if (duplicate.rowCount) throw new Error("DUPLICATE");
     const created = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,rating,title,body,author_name,status,source) values($1,$2,$3,$4,$5,$6,'pending','public') returning id", [shop.rows[0].id,productId,input.data.rating,input.data.title ?? null,input.data.body,input.data.authorName]);
     await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'review_submitted',$2)", [shop.rows[0].id, JSON.stringify({ source: "public" })]); return created.rows[0];
@@ -100,6 +101,7 @@ app.get("/api/admin/reviews", async (ctx) => {
   const source = ["public", "invitation"].includes(ctx.req.query("source") ?? "") ? ctx.req.query("source")! : null;
   const rating = ["1", "2", "3", "4", "5"].includes(ctx.req.query("rating") ?? "") ? Number(ctx.req.query("rating")) : null;
   const search = ctx.req.query("q")?.trim().slice(0, 120) || null;
+  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
   const result = await withDb(ctx.env, async (db) => {
     const values: Array<string | number> = [admin.shopDomain];
     const conditions = ["s.domain=$1"];
@@ -198,13 +200,13 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
   }
 
   if (job.topic === "orders/fulfilled") {
-    const payload = job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number }> };
+    const payload = job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number; title?: string }> };
     await withDb(env, async (db) => {
       const shop = await db.query<{ id: string; request_delay_days: number; request_enabled: boolean }>("select s.id,ss.request_delay_days,ss.request_enabled from shops s join shop_settings ss on ss.shop_id=s.id where s.domain=$1 and s.status='active'", [job.shopDomain]);
       if (payload.id && payload.email && shop.rowCount && shop.rows[0].request_enabled) {
         const due = new Date(Date.now() + shop.rows[0].request_delay_days * 86400000);
         for (const item of payload.line_items ?? []) if (item.product_id) {
-          const productId = await ensureProduct(db, shop.rows[0].id, String(item.product_id));
+          const productId = await ensureProduct(db, shop.rows[0].id, String(item.product_id), item.title);
           await createRequest(db, { shopId: shop.rows[0].id, productId, orderId: String(payload.id), variantId: item.variant_id ? String(item.variant_id) : undefined, email: payload.email, scheduledAt: due, tokenSecret: env.TOKEN_SECRET });
         }
       }
