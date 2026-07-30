@@ -122,3 +122,35 @@
 - 保留真实概览、状态、热门商品和最近评论数据，不影响其他后台功能。
 - `npm run typecheck`、`npm test`（8 项）和 `npm run build` 均通过。
 - 已发布 Worker 版本 `221cce62-c10d-4b7e-a906-89bfcc036d4c`。
+
+## Shopify 左侧 Reviews 子级（补充）
+
+### 本次目标
+
+将 Reviews 从应用主页面的顶部切换项调整为 Shopify 嵌入式后台左侧的真实子级页面；保留已完成的邀评记录功能。
+
+### 修改范围
+
+- `src/admin/Admin.tsx`
+- `src/admin/components/AppNavigation.tsx`（新增）
+- `src/admin/components/shopify-app-bridge.d.ts`（新增）
+- `src/admin/features/reviews/ReviewsWorkspace.tsx`（新增）
+- `src/admin/admin.css`
+
+### 新增与调整
+
+- 应用根路径 `/` 继续作为主级 Dashboard。
+- 使用 Shopify App Bridge 的应用导航组件，将 `Reviews` 和已有功能的 `Settings` 放入 Shopify 左侧应用子级导航。
+- `Reviews` 改为独立地址 `/reviews`；其中保留本地 `Reviews / Review requests` 两个页签，确保评论审核与测试邀评记录仍能连续使用。
+- `Settings` 改为独立地址 `/settings`。
+- `Resources` 暂未加入导航：该页面尚未开始制作，避免出现点击无效果的空入口。
+- Worker 既有 SPA 回退继续生效，`/reviews` 和 `/settings` 刷新时均可正确返回应用页面。
+
+### 自检
+
+- `npm run typecheck`：通过。
+- `npm test`：3 个测试文件、8 个测试全部通过。
+- `npm run build`：通过。
+- Worker 根路径、`/reviews`、`/settings` 真实请求均返回 `200`。
+- 已发布 Worker 版本 `9f2eb6bb-beb7-49ee-b5cd-9a8f804f84e8`。
+- 自动 Shopify 后台视觉验证未能复用当前已登录测试店会话；需要在用户的测试店后台刷新一次，确认左侧导航呈现与点击跳转。

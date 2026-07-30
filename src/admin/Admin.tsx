@@ -1,27 +1,29 @@
-import { AppProvider, Banner, Layout, Page, Tabs, Text } from "@shopify/polaris";
+import { AppProvider, Banner, Layout, Page, Text } from "@shopify/polaris";
 import { useCallback, useState } from "react";
 import { useAuthenticatedApi } from "./api";
 import "./dashboard.css";
+import { AppNavigation } from "./components/AppNavigation";
 import { DashboardPanel } from "./features/dashboard/DashboardPanel";
-import { TestDeliveriesPanel } from "./features/deliveries/TestDeliveriesPanel";
-import { ReviewsPanel } from "./features/reviews/ReviewsPanel";
+import { ReviewsWorkspace } from "./features/reviews/ReviewsWorkspace";
 import { SettingsPanel } from "./features/settings/SettingsPanel";
 
-const tabs = [
-  { id: "dashboard", content: "Dashboard" },
-  { id: "reviews", content: "Reviews" },
-  { id: "deliveries", content: "Review requests" },
-  { id: "settings", content: "Settings" },
-];
+type AppPage = "dashboard" | "reviews" | "settings";
+
+function currentPage(): AppPage {
+  if (location.pathname === "/reviews") return "reviews";
+  if (location.pathname === "/settings") return "settings";
+  return "dashboard";
+}
 
 export function Admin() {
-  const [tab, setTab] = useState(0);
   const [error, setError] = useState("");
   const request = useAuthenticatedApi();
   const clearError = useCallback(() => setError(""), []);
+  const page = currentPage();
 
   return (
     <AppProvider i18n={{}}>
+      <AppNavigation />
       <div className="tmr-admin-shell">
         <Page>
           <header className="tmr-app-header">
@@ -36,14 +38,10 @@ export function Admin() {
           </header>
 
           <Layout>
-            <Layout.Section>
-              <div className="tmr-app-tabs"><Tabs tabs={tabs} selected={tab} onSelect={setTab} /></div>
-            </Layout.Section>
             {error && <Layout.Section><Banner tone="critical" onDismiss={clearError}>{error}</Banner></Layout.Section>}
-            {tab === 0 && <Layout.Section><DashboardPanel request={request} onError={setError} /></Layout.Section>}
-            {tab === 1 && <Layout.Section><ReviewsPanel request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
-            {tab === 2 && <Layout.Section><TestDeliveriesPanel request={request} onError={setError} /></Layout.Section>}
-            {tab === 3 && <Layout.Section><SettingsPanel request={request} onError={setError} /></Layout.Section>}
+            {page === "dashboard" && <Layout.Section><DashboardPanel request={request} onError={setError} /></Layout.Section>}
+            {page === "reviews" && <Layout.Section><ReviewsWorkspace request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
+            {page === "settings" && <Layout.Section><SettingsPanel request={request} onError={setError} /></Layout.Section>}
           </Layout>
         </Page>
       </div>
