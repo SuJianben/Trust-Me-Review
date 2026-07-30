@@ -48,10 +48,10 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
     y: 170 - ((hoveredPoint.point.review_count / maxReviews) * 150),
   } : null;
   const tooltipPosition = tooltipPoint ? {
-    left: `clamp(4.5rem, ${tooltipPoint.xPercent}%, calc(100% - 4.5rem))`,
-    top: `${tooltipPoint.y / 190 * 100}%`,
+    left: `${tooltipPoint.xPercent}%`,
+    top: `clamp(1.75rem, ${tooltipPoint.y / 190 * 100}%, calc(100% - 1.75rem))`,
   } : undefined;
-  const tooltipOpensBelow = Boolean(tooltipPoint && tooltipPoint.y < 62);
+  const tooltipOpensLeft = Boolean(tooltipPoint && tooltipPoint.xPercent > 78);
 
   return <div className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
     <svg viewBox="0 0 720 190" role="img">
@@ -70,7 +70,7 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
         </g>;
       })}
     </svg>
-    {hoveredPoint && <div className={`tmr-product-trend-tooltip${tooltipOpensBelow ? " tmr-product-trend-tooltip--below" : ""}`} role="status" style={tooltipPosition}>
+    {hoveredPoint && <div className={`tmr-product-trend-tooltip${tooltipOpensLeft ? " tmr-product-trend-tooltip--left" : ""}`} role="status" style={tooltipPosition}>
       <strong>{hoveredPoint.point.review_count} review(s)</strong>
       <span>{totalReviews ? `${Math.round((hoveredPoint.point.review_count / totalReviews) * 100)}%` : "0%"}</span>
     </div>}

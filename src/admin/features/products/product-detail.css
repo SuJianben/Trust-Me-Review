@@ -24,12 +24,12 @@
 .tmr-product-trend-point:focus circle, .tmr-product-trend-point:hover circle { stroke: #fff; stroke-width: 2; }
 .tmr-product-trend text { fill: #6b778c; font-size: 11px; }
 .tmr-product-trend-month { font-size: 10px; }
-.tmr-product-trend-tooltip { position: absolute; z-index: 2; display: grid; gap: .12rem; min-width: 5.4rem; padding: .38rem .5rem; border-radius: .2rem; background: #263238; color: #fff; font-size: .68rem; line-height: 1.2; pointer-events: none; transform: translate(-50%, -110%); white-space: nowrap; }
-.tmr-product-trend-tooltip::after { position: absolute; bottom: -.28rem; left: 50%; width: .55rem; height: .55rem; background: #263238; content: ""; transform: translateX(-50%) rotate(45deg); }
+.tmr-product-trend-tooltip { position: absolute; z-index: 2; display: grid; gap: .12rem; min-width: 5.4rem; padding: .38rem .5rem; border-radius: .2rem; background: #263238; color: #fff; font-size: .68rem; line-height: 1.2; pointer-events: none; transform: translate(.65rem, -50%); white-space: nowrap; }
+.tmr-product-trend-tooltip::after { position: absolute; top: 50%; left: -.28rem; width: .55rem; height: .55rem; background: #263238; content: ""; transform: translateY(-50%) rotate(45deg); }
 .tmr-product-trend-tooltip strong, .tmr-product-trend-tooltip span { position: relative; z-index: 1; }
 .tmr-product-trend-tooltip strong::before { display: inline-block; width: .5rem; height: .5rem; margin-right: .32rem; border: 1px solid #6de0dc; background: #168787; content: ""; vertical-align: -.04rem; }
-.tmr-product-trend-tooltip--below { transform: translate(-50%, .55rem); }
-.tmr-product-trend-tooltip--below::after { top: -.28rem; bottom: auto; }
+.tmr-product-trend-tooltip--left { transform: translate(calc(-100% - .65rem), -50%); }
+.tmr-product-trend-tooltip--left::after { right: -.28rem; left: auto; }
 .tmr-product-detail-page .tmr-admin-workspace { gap: 0; }
 .tmr-product-detail-page .tmr-admin-heading { display: none; }
 
