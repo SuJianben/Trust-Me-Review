@@ -114,54 +114,6 @@ app.get("/api/admin/reviews", async (ctx) => {
   });
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
 });
-app.get("/api/admin/products", async (ctx) => {
-  const admin = ctx.get("admin")!;
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
-  const result = await withDb(ctx.env, (db) => db.query(`
-    select p.shopify_product_id, p.title_snapshot,
-      count(r.id)::int review_count,
-      count(r.id) filter (where r.status = 'published')::int published_count,
-      coalesce(avg(r.rating) filter (where r.status = 'published'), 0)::float average_rating
-    from products p
-    join shops s on s.id = p.shop_id
-    left join reviews r on r.product_id = p.id
-    where s.domain = $1
-    group by p.id, p.shopify_product_id, p.title_snapshot
-    order by count(r.id) desc, p.title_snapshot asc
-  `, [admin.shopDomain]));
-  return ctx.json(result.rows);
-});
-
-app.get("/api/admin/products/:productId", async (ctx) => {
-  const admin = ctx.get("admin")!;
-  const productId = ctx.req.param("productId");
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
-  const product = await withDb(ctx.env, (db) => db.query<{
-    shopify_product_id: string; title_snapshot: string; review_count: number; published_count: number; average_rating: number;
-  }>(`
-    select p.shopify_product_id, p.title_snapshot,
-      count(r.id)::int review_count,
-      count(r.id) filter (where r.status = 'published')::int published_count,
-      coalesce(avg(r.rating) filter (where r.status = 'published'), 0)::float average_rating
-    from products p
-    join shops s on s.id = p.shop_id
-    left join reviews r on r.product_id = p.id
-    where s.domain = $1 and p.shopify_product_id = $2
-    group by p.id, p.shopify_product_id, p.title_snapshot
-  `, [admin.shopDomain, productId]));
-  if (!product.rowCount) return ctx.json({ error: "Product not found" }, 404);
-
-  const reviews = await withDb(ctx.env, (db) => db.query(`
-    select r.*, rr.body reply_body
-    from reviews r
-    join products p on p.id = r.product_id
-    join shops s on s.id = r.shop_id
-    left join review_replies rr on rr.review_id = r.id
-    where s.domain = $1 and p.shopify_product_id = $2
-    order by r.created_at desc
-  `, [admin.shopDomain, productId]));
-  return ctx.json({ ...product.rows[0], reviews: reviews.rows });
-});
 app.patch("/api/admin/reviews/:id", async (ctx) => {
   const admin = ctx.get("admin")!; const input = moderationSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
   const updated = await withDb(ctx.env, async (db) => {
