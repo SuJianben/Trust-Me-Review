@@ -89,8 +89,10 @@ export function ProductManagementPanel({ request, onError }: ProductManagementPa
           {data.products.map((product) => (
             <div className="tmr-product-table-row" role="row" key={product.shopify_product_id}>
               <div className="tmr-product-identity">
-                {product.image_url ? <img alt="" src={product.image_url} /> : <span className="tmr-product-image-placeholder" aria-hidden="true" />}
-                <div><Text as="p" fontWeight="semibold">{productLabel(product)}</Text><Text as="p" tone="subdued">{product.catalog_status.toLowerCase()}</Text></div>
+                <a aria-label={`Open ${productLabel(product)}`} className="tmr-product-detail-link" href={`/products/${encodeURIComponent(product.shopify_product_id)}`}>
+                  {product.image_url ? <img alt="" src={product.image_url} /> : <span className="tmr-product-image-placeholder" aria-hidden="true" />}
+                </a>
+                <div><a className="tmr-product-title-link" href={`/products/${encodeURIComponent(product.shopify_product_id)}`}>{productLabel(product)}</a><Text as="p" tone="subdued">{product.catalog_status.toLowerCase()}</Text></div>
               </div>
               <Text as="p">{product.average_rating ? `${product.average_rating.toFixed(1)} / 5` : "—"}</Text>
               <Text as="p">{product.review_count}</Text>

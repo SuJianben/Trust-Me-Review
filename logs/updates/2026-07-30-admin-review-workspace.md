@@ -270,3 +270,12 @@
 - `Active` / `Inactive` 邀评状态徽章改为按文字实际宽度收缩，不再填满整列。
 - `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；`/settings` 返回 `200`。
 - 已发布 Worker 版本 `6550ba7d-b3a4-4843-acec-29140d380121`。
+
+## Product management 单商品详情页
+
+- Product management 的商品名称与主图现在可点击，进入应用内单商品详情页，而非跳转 Shopify 原生产品页。
+- 详情页展示商品主图、名称、Shopify 商品 ID、Handle、商品状态、商品级邀评状态、邀评记录数和已发布评论数。
+- 新增真实的近 12 个月平均评分趋势，以及该商品的独立评论审核列表；列表沿用既有评论审核逻辑，避免复制一套状态和操作代码。
+- 新增后台接口 `GET /api/admin/products/:productId`，查询强制以当前店铺域名和“至少一条未删除评论”限制数据范围。
+- `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；详情页面路径返回 `200`，未携带 Shopify 后台身份令牌访问详情数据接口返回 `401`。
+- 已发布 Worker 版本 `4e1faeb0-7687-4f53-b02f-6b4af87bf7fc`。

@@ -14,6 +14,7 @@ type Props = {
   onError: (message: string) => void;
   onClearError: () => void;
   productId?: string;
+  compact?: boolean;
 };
 
 const statusTone: Record<ReviewStatus, "success" | "attention" | "critical" | "info"> = { pending: "attention", published: "success", hidden: "critical", deleted: "critical" };
@@ -25,7 +26,7 @@ const ratingOptions = [{ label: "All ratings", value: "all" }, ...[5, 4, 3, 2, 1
 function reviewStars(rating: number) { return "★".repeat(rating) + "☆".repeat(5 - rating); }
 function createdAt(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 
-export function ReviewsPanel({ request, onError, onClearError, productId }: Props) {
+export function ReviewsPanel({ request, onError, onClearError, productId, compact = false }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -89,10 +90,10 @@ export function ReviewsPanel({ request, onError, onClearError, productId }: Prop
   const hasPreviousPage = page > 1; const hasNextPage = page * 30 < total;
 
   return <div className="tmr-admin-workspace">
-    <div className="tmr-admin-heading">
+    {!compact && <div className="tmr-admin-heading">
       <div><div className="tmr-eyebrow">REVIEW OPERATIONS</div><div className="tmr-title-row"><Text as="h1" variant="headingLg">Reviews</Text><Badge tone="info">{`${total} matching`}</Badge></div><Text as="p" tone="subdued">{productId ? `Showing reviews for Shopify product #${productId}.` : "Moderate customer feedback and keep storefront reviews accurate."}</Text></div>
       <Button onClick={() => void load()} loading={loading}>Refresh</Button>
-    </div>
+    </div>}
 
     <Card padding="0">
       <div className="tmr-review-tabs" role="tablist">

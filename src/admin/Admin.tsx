@@ -4,12 +4,14 @@ import { useAuthenticatedApi } from "./api";
 import "./dashboard.css";
 import { AppNavigation } from "./components/AppNavigation";
 import { DashboardPanel } from "./features/dashboard/DashboardPanel";
+import { ProductDetailPanel } from "./features/products/ProductDetailPanel";
 import { ReviewsWorkspace } from "./features/reviews/ReviewsWorkspace";
 import { SettingsWorkspace } from "./features/settings/SettingsWorkspace";
 
-type AppPage = "dashboard" | "reviews" | "settings";
+type AppPage = "dashboard" | "reviews" | "settings" | "product";
 
 function currentPage(): AppPage {
+  if (location.pathname.startsWith("/products/")) return "product";
   if (location.pathname === "/reviews") return "reviews";
   if (location.pathname === "/settings") return "settings";
   return "dashboard";
@@ -20,6 +22,7 @@ export function Admin() {
   const request = useAuthenticatedApi();
   const clearError = useCallback(() => setError(""), []);
   const page = currentPage();
+  const productId = page === "product" ? decodeURIComponent(location.pathname.slice("/products/".length)) : "";
 
   return (
     <AppProvider i18n={{}}>
@@ -42,6 +45,7 @@ export function Admin() {
             {page === "dashboard" && <Layout.Section><DashboardPanel request={request} onError={setError} /></Layout.Section>}
             {page === "reviews" && <Layout.Section><ReviewsWorkspace request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
             {page === "settings" && <Layout.Section><SettingsWorkspace request={request} onError={setError} /></Layout.Section>}
+            {page === "product" && <Layout.Section><ProductDetailPanel productId={productId} request={request} onError={setError} onClearError={clearError} /></Layout.Section>}
           </Layout>
         </Page>
       </div>

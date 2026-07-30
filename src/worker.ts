@@ -10,7 +10,7 @@ import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductTitles } from "./features/products/service";
-import { listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
+import { getAdminProductDetail, listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { randomToken, sha256 } from "./lib/crypto";
@@ -169,6 +169,12 @@ app.get("/api/admin/products", async (ctx) => {
   const search = (ctx.req.query("search") ?? "").trim().slice(0, 120);
   await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
   return ctx.json(await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain, filter, page, search)));
+});
+app.get("/api/admin/products/:productId", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  const product = await withDb(ctx.env, (db) => getAdminProductDetail(db, admin.shopDomain, ctx.req.param("productId")));
+  return product ? ctx.json(product) : ctx.json({ error: "Product not found" }, 404);
 });
 app.patch("/api/admin/products/:productId", async (ctx) => {
   const admin = ctx.get("admin")!;
