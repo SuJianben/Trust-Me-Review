@@ -26,8 +26,9 @@ function monthLabel(value: string) {
   return month ? new Intl.DateTimeFormat(undefined, { month: "short" }).format(new Date(2026, Number(month) - 1, 1)) : value;
 }
 
-function RatingTrend({ points }: { points: ProductDetail["monthlyRatings"] }) {
+function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["monthlyRatings"]; totalReviews: number }) {
   const [hoveredPoint, setHoveredPoint] = useState<{ point: ProductDetail["monthlyRatings"][number]; index: number } | null>(null);
+  const maxReviews = useMemo(() => Math.max(1.2, Math.ceil(Math.max(...points.map((point) => point.review_count), 0) * 1.2 * 5) / 5), [points]);
   const path = useMemo(() => {
     const width = 720;
     const height = 190;
@@ -37,32 +38,33 @@ function RatingTrend({ points }: { points: ProductDetail["monthlyRatings"] }) {
     const chartWidth = width - (xPadding * 2);
     return points.map((point, index) => {
       const x = xPadding + ((chartWidth * index) / Math.max(1, points.length - 1));
-      const y = height - yPadding - ((Math.max(0, Math.min(5, point.average_rating)) / 5) * chartHeight);
+      const y = height - yPadding - ((point.review_count / maxReviews) * chartHeight);
       return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
     }).join(" ");
-  }, [points]);
+  }, [maxReviews, points]);
 
   const tooltipPosition = hoveredPoint ? {
     left: `${(hoveredPoint.index / Math.max(1, points.length - 1)) * 100}%`,
-    top: `${(170 - ((Math.max(0, Math.min(5, hoveredPoint.point.average_rating)) / 5) * 150)) / 190 * 100}%`,
+    top: `${(170 - ((hoveredPoint.point.review_count / maxReviews) * 150)) / 190 * 100}%`,
   } : undefined;
 
-  return <div className="tmr-product-trend" aria-label="Average rating over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
+  return <div className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
     <svg viewBox="0 0 720 190" role="img">
-      {[0, 1, 2, 3, 4, 5].map((rating) => {
-        const y = 170 - ((rating / 5) * 150);
-        return <g key={rating}><line x1="30" x2="690" y1={y} y2={y} /><text x="8" y={y + 4}>{rating}</text></g>;
+      {Array.from({ length: 7 }, (_, index) => index).map((index) => {
+        const value = (maxReviews / 6) * index;
+        const y = 170 - ((value / maxReviews) * 150);
+        return <g key={value}><line x1="30" x2="690" y1={y} y2={y} /><text x="8" y={y + 4}>{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
       })}
       {path && <path d={path} />}
       {points.map((point, index) => {
         const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
-        const y = 170 - ((Math.max(0, Math.min(5, point.average_rating)) / 5) * 150);
+        const y = 170 - ((point.review_count / maxReviews) * 150);
         return <g className="tmr-product-trend-point" key={point.month} onBlur={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint({ point, index })} onMouseEnter={() => setHoveredPoint({ point, index })} tabIndex={0}><circle cx={x} cy={y} r="5" /><text className="tmr-product-trend-month" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text></g>;
       })}
     </svg>
     {hoveredPoint && <div className="tmr-product-trend-tooltip" role="status" style={tooltipPosition}>
-      <strong>{hoveredPoint.point.review_count} review{hoveredPoint.point.review_count === 1 ? "" : "s"}</strong>
-      <span>{hoveredPoint.point.review_count ? `${hoveredPoint.point.average_rating.toFixed(1)} / 5 average rating` : "0% of reviews"}</span>
+      <strong>{hoveredPoint.point.review_count} review(s)</strong>
+      <span>{totalReviews ? `${Math.round((hoveredPoint.point.review_count / totalReviews) * 100)}%` : "0%"}</span>
     </div>}
   </div>;
 }
@@ -112,7 +114,7 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
         <div><Text as="p" tone="subdued">Reviews with media</Text><Text as="p" variant="headingLg">0</Text></div>
         <div><Text as="p" tone="subdued">Average rating</Text><Text as="p" variant="headingLg">{product.average_rating ? product.average_rating.toFixed(1) : "—"}</Text></div>
       </div>
-      <RatingTrend points={product.monthlyRatings} />
+      <ReviewVolumeTrend points={product.monthlyRatings} totalReviews={product.review_count} />
     </Card>
 
     <ReviewsPanel compact productId={productId} request={request} onError={onError} onClearError={onClearError} />

@@ -122,8 +122,8 @@ export async function getAdminProductDetail(client: pg.Client, shopDomain: strin
   const monthly = await client.query<{ month: string; average_rating: number; review_count: number }>(`
     select
       to_char(month_start, 'YYYY-MM') as month,
-      coalesce(avg(r.rating) filter (where r.status = 'published'), 0)::float8 as average_rating,
-      count(r.id) filter (where r.status = 'published')::int as review_count
+      coalesce(avg(r.rating) filter (where r.status <> 'deleted'), 0)::float8 as average_rating,
+      count(r.id) filter (where r.status <> 'deleted')::int as review_count
     from generate_series(
       date_trunc('month', now()) - interval '11 months',
       date_trunc('month', now()),
