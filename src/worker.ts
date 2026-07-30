@@ -167,6 +167,7 @@ app.get("/api/admin/products", async (ctx) => {
   const filter = ctx.req.query("filter") === "active" || ctx.req.query("filter") === "inactive" ? ctx.req.query("filter") as ProductRequestFilter : "all";
   const page = Math.max(1, Number(ctx.req.query("page") ?? 1) || 1);
   const search = (ctx.req.query("search") ?? "").trim().slice(0, 120);
+  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
   return ctx.json(await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain, filter, page, search)));
 });
 app.patch("/api/admin/products/:productId", async (ctx) => {

@@ -263,3 +263,10 @@
 - 工作区与右侧内容区均改为按内容高度排列，Product management 表格现在紧接标题和说明显示。
 - `npm run typecheck`、`npm test`（10 项）和 `npm run build` 均通过；`/settings` 返回 `200`。
 - 已发布 Worker 版本 `7fb33829-ec81-4a87-8ed8-c2b740cad4b3`。
+
+## Product management 主图与状态徽章优化（补充）
+
+- 商品管理列表加载时，仅对已存在评论关联、且缺少标题或主图缓存的商品补查 Shopify GraphQL；主图写入既有 `products.image_url`，不恢复全店商品同步。
+- `Active` / `Inactive` 邀评状态徽章改为按文字实际宽度收缩，不再填满整列。
+- `npm run typecheck`、`npm test`（10 项）、`npm run build` 与 `git diff --check` 均通过；`/settings` 返回 `200`。
+- 已发布 Worker 版本 `6550ba7d-b3a4-4843-acec-29140d380121`。
