@@ -12,7 +12,7 @@ type SettingsWorkspaceProps = {
 };
 
 export function SettingsWorkspace({ request, onError }: SettingsWorkspaceProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("requests");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("review-requests");
 
   return (
     <div className="tmr-settings-workspace">

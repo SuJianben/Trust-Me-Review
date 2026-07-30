@@ -19,7 +19,8 @@ const defaults: ShopSettings = {
 };
 
 const sectionContent = {
-  requests: { title: "Review requests", description: "Control when fulfilled orders are added to the review request queue." },
+  "review-requests": { title: "Review requests", description: "Control whether fulfilled orders can be added to the review request queue." },
+  "request-scheduling": { title: "Request scheduling", description: "Choose how many days to wait after fulfillment before a review request is queued." },
   templates: { title: "Email templates", description: "Set the subject line used by V1 test review invitations." },
   display: { title: "Storefront display", description: "Control the verified-purchase label and star colour used in the storefront widgets." },
   language: { title: "Language & notifications", description: "Manage the English and Chinese subject lines shown in test review invitations." },
@@ -79,8 +80,10 @@ export function SettingsPanel({ request, onError, section }: Props) {
       <Card>
         <FormLayout>
           {saved && <Banner tone="success">Settings saved.</Banner>}
-          {section === "requests" && <>
+          {section === "review-requests" && <>
             <Checkbox label="Enable automatic review requests" checked={settings.request_enabled} disabled={loading} onChange={(value) => setSettings((current) => ({ ...current, request_enabled: value }))} />
+          </>}
+          {section === "request-scheduling" && <>
             <TextField label="Delay after fulfillment (days)" type="number" min={0} max={90} value={String(settings.request_delay_days)} onChange={(value) => setSettings((current) => ({ ...current, request_delay_days: Math.min(90, Math.max(0, Number(value) || 0)) }))} autoComplete="off" helpText="Use 0 in the development store to queue an invitation immediately after fulfillment." disabled={loading} />
           </>}
           {(section === "templates" || section === "language") && <>

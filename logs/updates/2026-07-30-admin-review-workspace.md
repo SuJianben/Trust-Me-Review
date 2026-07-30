@@ -190,3 +190,11 @@
 - `npm run build`：通过。
 - `/settings` 与 `/reviews` 真实请求均返回 `200`；`/api/admin/products` 未携带 Shopify 身份令牌时返回 `401`，符合后台接口保护规则。
 - 已发布 Worker 版本 `6a48dd36-5c48-4e17-ba33-f932a1470a4d`。
+
+## Settings 导航状态与间距修复（补充）
+
+- 修复 `Review requests` 和 `Request scheduling` 共用状态值导致同时高亮的问题。
+- 两项现在分别对应独立页面：前者管理自动邀评开关，后者管理履约后的发送延迟天数。
+- 收紧左侧导航宽度、分组间距、菜单行高和选中底色的圆角范围，使导航更紧凑。
+- `npm run typecheck`、`npm test`（8 项）和 `npm run build` 均通过。
+- 已发布 Worker 版本 `3206884e-fb9e-434a-a057-cae1933c1a76`。

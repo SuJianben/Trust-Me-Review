@@ -1,4 +1,4 @@
-export type SettingsSection = "requests" | "templates" | "product-management" | "display" | "language";
+export type SettingsSection = "review-requests" | "request-scheduling" | "templates" | "product-management" | "display" | "language";
 
 export type ShopSettings = {
   request_enabled: boolean;

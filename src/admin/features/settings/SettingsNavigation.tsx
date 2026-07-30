@@ -15,8 +15,8 @@ const sections: Array<{ heading: string; items: NavigationItem[] }> = [
     heading: "REVIEW COLLECTION",
     items: [
       { label: "Import reviews" },
-      { label: "Review requests", section: "requests" },
-      { label: "Request scheduling", section: "requests" },
+      { label: "Review requests", section: "review-requests" },
+      { label: "Request scheduling", section: "request-scheduling" },
       { label: "Email templates", section: "templates" },
       { label: "Product management", section: "product-management" },
       { label: "Bundles" },
