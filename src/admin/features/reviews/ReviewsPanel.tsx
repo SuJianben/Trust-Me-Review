@@ -13,6 +13,7 @@ type Props = {
   request: AuthenticatedRequest;
   onError: (message: string) => void;
   onClearError: () => void;
+  onOpenProduct: (productId: string) => void;
 };
 
 const statusTone: Record<ReviewStatus, "success" | "attention" | "critical" | "info"> = { pending: "attention", published: "success", hidden: "critical", deleted: "critical" };
@@ -24,7 +25,7 @@ const ratingOptions = [{ label: "All ratings", value: "all" }, ...[5, 4, 3, 2, 1
 function reviewStars(rating: number) { return "★".repeat(rating) + "☆".repeat(5 - rating); }
 function createdAt(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 
-export function ReviewsPanel({ request, onError, onClearError }: Props) {
+export function ReviewsPanel({ request, onError, onClearError, onOpenProduct }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -105,7 +106,7 @@ export function ReviewsPanel({ request, onError, onClearError }: Props) {
       <div className="tmr-review-table" aria-busy={loading}>
         <div className="tmr-review-table-head"><span>Customer</span><span>Created</span><span>Rating & review</span><span>Status</span><span>Actions</span></div>
         {reviews.map((review) => <article className="tmr-review-row" key={review.id}>
-          <div className="tmr-customer-cell"><Text as="p" fontWeight="semibold">{review.author_name}</Text><Text as="p" tone="subdued">{review.source === "invitation" ? "Verified invitation" : "Public form"}{review.verified_purchase ? " · Verified" : ""}</Text><Text as="p" tone="subdued">Product: {review.title_snapshot || `Product #${review.shopify_product_id}`}</Text></div>
+          <div className="tmr-customer-cell"><Text as="p" fontWeight="semibold">{review.author_name}</Text><Text as="p" tone="subdued">{review.source === "invitation" ? "Verified invitation" : "Public form"}{review.verified_purchase ? " · Verified" : ""}</Text><button className="tmr-product-link" type="button" onClick={() => onOpenProduct(review.shopify_product_id)}>Product: {review.title_snapshot || `Product #${review.shopify_product_id}`}</button></div>
           <Text as="p" tone="subdued">{createdAt(review.created_at)}</Text>
           <div className="tmr-review-content"><div className="tmr-rating">{reviewStars(review.rating)}</div>{review.title && <Text as="p" fontWeight="semibold">{review.title}</Text>}<Text as="p">{review.body}</Text>{review.reply_body && <Text as="p" tone="subdued">Store reply: {review.reply_body}</Text>}</div>
           <div className="tmr-status-cell"><Badge tone={statusTone[review.status]}>{review.status}</Badge><Select label={`Status for ${review.author_name}`} labelHidden options={reviewStatusOptions} value={review.status} onChange={(value) => void updateReview(review.id, { status: value as ReviewStatus })} /></div>
