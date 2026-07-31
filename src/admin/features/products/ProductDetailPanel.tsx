@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Text } from "@shopify/polaris";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthenticatedRequest } from "../../api";
 import { ReviewsPanel } from "../reviews/ReviewsPanel";
 import type { ManagedProduct } from "../settings/types";
@@ -27,7 +27,8 @@ function monthLabel(value: string) {
 }
 
 function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["monthlyRatings"]; totalReviews: number }) {
-  const [hoveredPoint, setHoveredPoint] = useState<{ point: ProductDetail["monthlyRatings"][number]; index: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ point: ProductDetail["monthlyRatings"][number]; index: number; x: number; y: number; alignLeft: boolean } | null>(null);
   const maxReviews = useMemo(() => Math.max(1.2, Math.ceil(Math.max(...points.map((point) => point.review_count), 0) * 1.2 * 5) / 5), [points]);
   const path = useMemo(() => {
     const width = 720;
@@ -43,34 +44,42 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
     }).join(" ");
   }, [maxReviews, points]);
 
-  const tooltipPoint = hoveredPoint ? {
-    xPercent: (hoveredPoint.index / Math.max(1, points.length - 1)) * 100,
-    y: 170 - ((hoveredPoint.point.review_count / maxReviews) * 150),
-  } : null;
-  const tooltipPosition = tooltipPoint ? {
-    left: `${tooltipPoint.xPercent}%`,
-    top: `clamp(1.75rem, ${tooltipPoint.y / 190 * 100}%, calc(100% - 1.75rem))`,
-  } : undefined;
-  const tooltipOpensLeft = Boolean(tooltipPoint && tooltipPoint.xPercent > 78);
+  const showTooltip = useCallback((point: ProductDetail["monthlyRatings"][number], index: number, target: SVGCircleElement) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const x = targetRect.left - containerRect.left + (targetRect.width / 2);
+    const y = targetRect.top - containerRect.top + (targetRect.height / 2);
+    setHoveredPoint({
+      point,
+      index,
+      x,
+      y: Math.max(14, Math.min(containerRect.height - 14, y)),
+      alignLeft: x > containerRect.width - 150,
+    });
+  }, []);
 
-  return <div className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
-    <svg viewBox="0 0 720 190" role="img">
-      {Array.from({ length: 7 }, (_, index) => index).map((index) => {
-        const value = (maxReviews / 6) * index;
-        const y = 170 - ((value / maxReviews) * 150);
-        return <g key={value}><line x1="30" x2="690" y1={y} y2={y} /><text x="8" y={y + 4}>{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
-      })}
-      {path && <path d={path} />}
-      {points.map((point, index) => {
-        const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
-        const y = 170 - ((point.review_count / maxReviews) * 150);
-        return <g className="tmr-product-trend-point" key={point.month}>
-          <circle aria-label={`${monthLabel(point.month)}: ${point.review_count} review(s)`} cx={x} cy={y} onBlur={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint({ point, index })} onMouseEnter={() => setHoveredPoint({ point, index })} r="5" tabIndex={0} />
-          <text className="tmr-product-trend-month" pointerEvents="none" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text>
-        </g>;
-      })}
-    </svg>
-    {hoveredPoint && <div className={`tmr-product-trend-tooltip${tooltipOpensLeft ? " tmr-product-trend-tooltip--left" : ""}`} role="status" style={tooltipPosition}>
+  return <div ref={containerRef} className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
+    <div className="tmr-product-trend-scroll">
+      <svg viewBox="0 0 720 190" role="img">
+        {Array.from({ length: 7 }, (_, index) => index).map((index) => {
+          const value = (maxReviews / 6) * index;
+          const y = 170 - ((value / maxReviews) * 150);
+          return <g key={value}><line x1="30" x2="690" y1={y} y2={y} /><text x="8" y={y + 4}>{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
+        })}
+        {path && <path d={path} />}
+        {points.map((point, index) => {
+          const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
+          const y = 170 - ((point.review_count / maxReviews) * 150);
+          return <g className="tmr-product-trend-point" key={point.month}>
+            <circle aria-label={`${monthLabel(point.month)}: ${point.review_count} review(s)`} cx={x} cy={y} onBlur={() => setHoveredPoint(null)} onFocus={(event) => showTooltip(point, index, event.currentTarget)} onMouseEnter={(event) => showTooltip(point, index, event.currentTarget)} r="5" tabIndex={0} />
+            <text className="tmr-product-trend-month" pointerEvents="none" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text>
+          </g>;
+        })}
+      </svg>
+    </div>
+    {hoveredPoint && <div className={`tmr-product-trend-tooltip${hoveredPoint.alignLeft ? " tmr-product-trend-tooltip--left" : ""}`} role="status" style={{ left: `${hoveredPoint.x}px`, top: `${hoveredPoint.y}px` }}>
       <strong>{hoveredPoint.point.review_count} review(s)</strong>
       <span>{totalReviews ? `${Math.round((hoveredPoint.point.review_count / totalReviews) * 100)}%` : "0%"}</span>
     </div>}

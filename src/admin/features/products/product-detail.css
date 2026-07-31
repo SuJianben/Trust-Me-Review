@@ -14,8 +14,9 @@
 .tmr-product-stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
 .tmr-product-stat-cards > div { display: grid; gap: .4rem; border: 1px solid var(--tmr-line); border-radius: .55rem; padding: 1rem; }
 .tmr-product-stat-cards .Polaris-Text--root { margin: 0; }
-.tmr-product-trend { position: relative; overflow-x: auto; margin-top: 1.25rem; }
-.tmr-product-trend svg { display: block; min-width: 38rem; width: 100%; height: auto; }
+.tmr-product-trend { position: relative; overflow: visible; margin-top: 1.25rem; }
+.tmr-product-trend-scroll { overflow-x: auto; }
+.tmr-product-trend-scroll svg { display: block; min-width: 38rem; width: 100%; height: auto; }
 .tmr-product-trend line { stroke: #dfe3e8; stroke-width: 1; }
 .tmr-product-trend path { fill: none; stroke: #14866d; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .tmr-product-trend circle { fill: #14866d; }
