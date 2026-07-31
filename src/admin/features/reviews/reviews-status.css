@@ -14,3 +14,23 @@
   background: #b7f7c8;
   color: #0f5132;
 }
+
+.tmr-review-product-link {
+  display: block;
+  color: #174c87;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.tmr-review-product-link:hover {
+  color: #005bd3;
+  text-decoration: underline;
+}
+
+.tmr-review-product-link:focus-visible {
+  outline: 2px solid #2c6ecb;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
