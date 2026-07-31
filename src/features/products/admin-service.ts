@@ -37,6 +37,7 @@ type ProductDetailRow = AdminProductSummary & {
 };
 
 export type AdminProductDetail = AdminProductSummary & {
+  shop_domain: string;
   handle_snapshot: string;
   trendRangeLabel: string;
   trendRangePreset: ProductTrendPreset;
@@ -149,6 +150,7 @@ export async function getAdminProductDetail(
   const { id: _id, ...summary } = product;
   return {
     ...summary,
+    shop_domain: shopDomain,
     trendRangeLabel: selection.label,
     trendRangePreset: selection.preset,
     trendReviewCount: trendSummary.reviewCount,

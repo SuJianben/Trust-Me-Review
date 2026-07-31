@@ -1,0 +1,16 @@
+.tmr-status-cell .tmr-review-status {
+  display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  border-radius: 999px;
+}
+
+.tmr-status-cell .tmr-review-status .Polaris-Badge {
+  border: 0;
+  box-shadow: none;
+}
+
+.tmr-status-cell .tmr-review-status--published .Polaris-Badge {
+  background: #b7f7c8;
+  color: #0f5132;
+}

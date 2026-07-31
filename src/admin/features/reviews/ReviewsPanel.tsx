@@ -1,6 +1,7 @@
 import { Badge, Button, Card, Select, Text, TextField } from "@shopify/polaris";
 import { useCallback, useEffect, useState } from "react";
 import type { AuthenticatedRequest } from "../../api";
+import "./reviews-status.css";
 
 type ReviewStatus = "pending" | "published" | "hidden" | "deleted";
 type Review = {
@@ -111,7 +112,7 @@ export function ReviewsPanel({ request, onError, onClearError, productId, compac
           <div className="tmr-customer-cell"><Text as="p" fontWeight="semibold">{review.author_name}</Text><Text as="p" tone="subdued">{review.source === "invitation" ? "Verified invitation" : "Public form"}{review.verified_purchase ? " · Verified" : ""}</Text><Text as="p" tone="subdued">Product: {review.title_snapshot || `Product #${review.shopify_product_id}`}</Text></div>
           <Text as="p" tone="subdued">{createdAt(review.created_at)}</Text>
           <div className="tmr-review-content"><div className="tmr-rating">{reviewStars(review.rating)}</div>{review.title && <Text as="p" fontWeight="semibold">{review.title}</Text>}<Text as="p">{review.body}</Text>{review.reply_body && <Text as="p" tone="subdued">Store reply: {review.reply_body}</Text>}</div>
-          <div className="tmr-status-cell"><Badge tone={statusTone[review.status]}>{review.status}</Badge><Select label={`Status for ${review.author_name}`} labelHidden options={reviewStatusOptions} value={review.status} onChange={(value) => void updateReview(review.id, { status: value as ReviewStatus })} /></div>
+          <div className="tmr-status-cell"><span className={`tmr-review-status tmr-review-status--${review.status}`}><Badge tone={statusTone[review.status]}>{review.status}</Badge></span><Select label={`Status for ${review.author_name}`} labelHidden options={reviewStatusOptions} value={review.status} onChange={(value) => void updateReview(review.id, { status: value as ReviewStatus })} /></div>
           <div className="tmr-review-actions"><Button size="slim" onClick={() => openReply(review)}>Reply</Button><Button size="slim" onClick={() => void updateReview(review.id, { pinned: !review.pinned })}>{review.pinned ? "Unpin" : "Pin"}</Button><Button size="slim" tone="critical" onClick={() => void deleteReview(review.id)}>Delete</Button></div>
         </article>)}
         {!loading && !reviews.length && <div className="tmr-empty-state"><Text as="p">No reviews match these filters.</Text></div>}

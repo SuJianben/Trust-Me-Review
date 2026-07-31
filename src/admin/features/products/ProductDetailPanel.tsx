@@ -14,6 +14,7 @@ import type { ManagedProduct } from "../settings/types";
 import "./product-detail.css";
 
 type ProductDetail = ManagedProduct & {
+  shop_domain: string;
   handle_snapshot: string;
   trendRangeLabel: string;
   trendRangePreset: ProductTrendPreset;
@@ -220,11 +221,13 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
   if (!product && loading) return <div className="tmr-product-detail-loading"><Text as="p" tone="subdued">Loading product details…</Text></div>;
   if (!product) return <div className="tmr-product-detail-loading"><Button url="/settings?section=product-management">Back to Product management</Button></div>;
 
+  const productUrl = product.handle_snapshot && product.shop_domain ? `https://${product.shop_domain}/products/${encodeURIComponent(product.handle_snapshot)}` : null;
+
   return <div className="tmr-product-detail-page">
     <header className="tmr-product-detail-header">
       <Button accessibilityLabel="Back to Product management" icon={() => <span aria-hidden="true">←</span>} url="/settings?section=product-management" />
       {product.image_url ? <img alt="" className="tmr-product-detail-image" src={product.image_url} /> : <span className="tmr-product-detail-image tmr-product-detail-placeholder" aria-hidden="true" />}
-      <div><Text as="h1" variant="headingLg">{productLabel(product)}</Text><Text as="p" tone="subdued">Shopify product #{product.shopify_product_id}</Text></div>
+      <div>{productUrl ? <a className="tmr-product-detail-title-link" href={productUrl} target="_blank" rel="noreferrer"><Text as="h1" variant="headingLg">{productLabel(product)}</Text></a> : <Text as="h1" variant="headingLg">{productLabel(product)}</Text>}<Text as="p" tone="subdued">Shopify product #{product.shopify_product_id}</Text></div>
       <Badge tone={product.request_enabled ? "success" : "critical"}>{product.request_enabled ? "Requests active" : "Requests inactive"}</Badge>
     </header>
 
