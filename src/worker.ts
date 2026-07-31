@@ -9,7 +9,7 @@ import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/aut
 import { ensureManagedShop } from "./features/shops/service";
 import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
-import { refreshMissingProductTitles } from "./features/products/service";
+import { refreshMissingProductSnapshots } from "./features/products/service";
 import { getAdminProductDetail, listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
 import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
@@ -98,7 +98,7 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
 
 app.get("/api/admin/dashboard", async (ctx) => {
   const admin = ctx.get("admin")!;
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  await withDb(ctx.env, (db) => refreshMissingProductSnapshots(db, ctx.env, admin.shopDomain));
   const data = await withDb(ctx.env, async (db) => {
     const metrics = await db.query<{
       total_reviews: number; published_reviews: number; pending_reviews: number;
@@ -148,7 +148,7 @@ app.get("/api/admin/reviews", async (ctx) => {
   const rating = ["1", "2", "3", "4", "5"].includes(ctx.req.query("rating") ?? "") ? Number(ctx.req.query("rating")) : null;
   const search = ctx.req.query("q")?.trim().slice(0, 120) || null;
   const productId = ctx.req.query("product")?.trim().slice(0, 50) || null;
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  await withDb(ctx.env, (db) => refreshMissingProductSnapshots(db, ctx.env, admin.shopDomain));
   const result = await withDb(ctx.env, async (db) => {
     const values: Array<string | number> = [admin.shopDomain];
     const conditions = ["s.domain=$1"];
@@ -167,13 +167,17 @@ app.get("/api/admin/products", async (ctx) => {
   const filter = ctx.req.query("filter") === "active" || ctx.req.query("filter") === "inactive" ? ctx.req.query("filter") as ProductRequestFilter : "all";
   const page = Math.max(1, Number(ctx.req.query("page") ?? 1) || 1);
   const search = (ctx.req.query("search") ?? "").trim().slice(0, 120);
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
+  await withDb(ctx.env, (db) => refreshMissingProductSnapshots(db, ctx.env, admin.shopDomain));
   return ctx.json(await withDb(ctx.env, (db) => listAdminProducts(db, admin.shopDomain, filter, page, search)));
 });
 app.get("/api/admin/products/:productId", async (ctx) => {
   const admin = ctx.get("admin")!;
-  await withDb(ctx.env, (db) => refreshMissingProductTitles(db, ctx.env, admin.shopDomain));
-  const product = await withDb(ctx.env, (db) => getAdminProductDetail(db, admin.shopDomain, ctx.req.param("productId")));
+  await withDb(ctx.env, (db) => refreshMissingProductSnapshots(db, ctx.env, admin.shopDomain));
+  const product = await withDb(ctx.env, (db) => getAdminProductDetail(db, admin.shopDomain, ctx.req.param("productId"), {
+    range: ctx.req.query("range"),
+    startDate: ctx.req.query("start"),
+    endDate: ctx.req.query("end"),
+  }));
   return product ? ctx.json(product) : ctx.json({ error: "Product not found" }, 404);
 });
 app.patch("/api/admin/products/:productId", async (ctx) => {

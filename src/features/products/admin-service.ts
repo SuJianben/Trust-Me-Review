@@ -1,4 +1,12 @@
 import type pg from "pg";
+import {
+  buildProductTrendSeries,
+  resolveProductTrendSelection,
+  summarizeProductTrend,
+  type ProductTrendPoint,
+  type ProductTrendPreset,
+  type ProductTrendReviewRow,
+} from "./trend-range";
 
 export type AdminProductSummary = {
   shopify_product_id: string;
@@ -30,7 +38,11 @@ type ProductDetailRow = AdminProductSummary & {
 
 export type AdminProductDetail = AdminProductSummary & {
   handle_snapshot: string;
-  monthlyRatings: Array<{ month: string; average_rating: number; review_count: number }>;
+  trendRangeLabel: string;
+  trendRangePreset: ProductTrendPreset;
+  trendReviewCount: number;
+  trendAverageRating: number;
+  trendPoints: ProductTrendPoint[];
 };
 
 export async function listAdminProducts(
@@ -94,7 +106,12 @@ export async function updateProductRequestEnabled(client: pg.Client, shopDomain:
   return updated.rows[0] ?? null;
 }
 
-export async function getAdminProductDetail(client: pg.Client, shopDomain: string, shopifyProductId: string): Promise<AdminProductDetail | null> {
+export async function getAdminProductDetail(
+  client: pg.Client,
+  shopDomain: string,
+  shopifyProductId: string,
+  trendRange?: { range?: string | null; startDate?: string | null; endDate?: string | null },
+): Promise<AdminProductDetail | null> {
   const result = await client.query<ProductDetailRow>(`
     select
       p.id,
@@ -119,25 +136,24 @@ export async function getAdminProductDetail(client: pg.Client, shopDomain: strin
   const product = result.rows[0];
   if (!product) return null;
 
-  const monthly = await client.query<{ month: string; average_rating: number; review_count: number }>(`
-    select
-      to_char(month_start, 'YYYY-MM') as month,
-      coalesce(avg(r.rating) filter (where r.status <> 'deleted'), 0)::float8 as average_rating,
-      count(r.id) filter (where r.status <> 'deleted')::int as review_count
-    from generate_series(
-      date_trunc('month', now()) - interval '11 months',
-      date_trunc('month', now()),
-      interval '1 month'
-    ) as month_start
-    left join reviews r on r.product_id = $1
-      and r.created_at >= month_start
-      and r.created_at < month_start + interval '1 month'
-    group by month_start
-    order by month_start
+  const reviews = await client.query<ProductTrendReviewRow>(`
+    select rating,status,created_at
+    from reviews
+    where product_id = $1 and status <> 'deleted'
+    order by created_at asc
   `, [product.id]);
+  const selection = resolveProductTrendSelection(trendRange ?? {});
+  const trendSummary = summarizeProductTrend(reviews.rows, selection);
 
   const { id: _id, ...summary } = product;
-  return { ...summary, monthlyRatings: monthly.rows };
+  return {
+    ...summary,
+    trendRangeLabel: selection.label,
+    trendRangePreset: selection.preset,
+    trendReviewCount: trendSummary.reviewCount,
+    trendAverageRating: trendSummary.averageRating,
+    trendPoints: buildProductTrendSeries(reviews.rows, selection),
+  };
 }
 
 export async function productRequestsEnabled(client: pg.Client, productId: string) {

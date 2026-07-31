@@ -1,5 +1,13 @@
-import { Badge, Button, Card, Text } from "@shopify/polaris";
+import { Badge, Button, Card, Popover, Text, TextField } from "@shopify/polaris";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  PRODUCT_TREND_PRESETS,
+  formatProductTrendSelectionLabel,
+  resolveProductTrendSelection,
+  type ProductTrendPoint,
+  type ProductTrendPreset,
+  type ProductTrendSelection,
+} from "../../../features/products/trend-range";
 import type { AuthenticatedRequest } from "../../api";
 import { ReviewsPanel } from "../reviews/ReviewsPanel";
 import type { ManagedProduct } from "../settings/types";
@@ -7,7 +15,11 @@ import "./product-detail.css";
 
 type ProductDetail = ManagedProduct & {
   handle_snapshot: string;
-  monthlyRatings: Array<{ month: string; average_rating: number; review_count: number }>;
+  trendRangeLabel: string;
+  trendRangePreset: ProductTrendPreset;
+  trendReviewCount: number;
+  trendAverageRating: number;
+  trendPoints: ProductTrendPoint[];
 };
 
 type ProductDetailPanelProps = {
@@ -21,15 +33,99 @@ function productLabel(product: ProductDetail) {
   return product.title_snapshot || `Product #${product.shopify_product_id}`;
 }
 
-function monthLabel(value: string) {
-  const [, month] = value.split("-");
-  return month ? new Intl.DateTimeFormat(undefined, { month: "short" }).format(new Date(2026, Number(month) - 1, 1)) : value;
+function initialTrendSelection() {
+  if (typeof window === "undefined") return resolveProductTrendSelection({});
+  const params = new URLSearchParams(window.location.search);
+  return resolveProductTrendSelection({
+    range: params.get("range"),
+    startDate: params.get("start"),
+    endDate: params.get("end"),
+  });
 }
 
-function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["monthlyRatings"]; totalReviews: number }) {
+function trendQuery(selection: ProductTrendSelection) {
+  const query = new URLSearchParams();
+  query.set("range", selection.preset);
+  if (selection.preset === "custom" && selection.startDate && selection.endDate) {
+    query.set("start", selection.startDate);
+    query.set("end", selection.endDate);
+  }
+  return query.toString();
+}
+
+function syncTrendUrl(selection: ProductTrendSelection) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (selection.preset === "12m") {
+    url.searchParams.delete("range");
+    url.searchParams.delete("start");
+    url.searchParams.delete("end");
+  } else {
+    url.searchParams.set("range", selection.preset);
+    if (selection.preset === "custom" && selection.startDate && selection.endDate) {
+      url.searchParams.set("start", selection.startDate);
+      url.searchParams.set("end", selection.endDate);
+    } else {
+      url.searchParams.delete("start");
+      url.searchParams.delete("end");
+    }
+  }
+  window.history.replaceState(null, "", url);
+}
+
+function ProductTrendRangePicker({ selection, onChange }: { selection: ProductTrendSelection; onChange: (selection: ProductTrendSelection) => void }) {
+  const [active, setActive] = useState(false);
+  const [customOpen, setCustomOpen] = useState(selection.preset === "custom");
+  const [customStart, setCustomStart] = useState(selection.startDate ?? "");
+  const [customEnd, setCustomEnd] = useState(selection.endDate ?? "");
+
+  useEffect(() => {
+    if (selection.preset === "custom") {
+      setCustomOpen(true);
+      setCustomStart(selection.startDate ?? "");
+      setCustomEnd(selection.endDate ?? "");
+    }
+  }, [selection.endDate, selection.preset, selection.startDate]);
+
+  const choosePreset = (preset: ProductTrendPreset) => {
+    if (preset === "custom") {
+      setCustomOpen(true);
+      return;
+    }
+    onChange(resolveProductTrendSelection({ range: preset }));
+    setActive(false);
+  };
+
+  const applyCustom = () => {
+    onChange(resolveProductTrendSelection({ range: "custom", startDate: customStart, endDate: customEnd }));
+    setActive(false);
+  };
+
+  const customDisabled = !customStart || !customEnd || customStart > customEnd;
+  const activator = <Button disclosure onClick={() => setActive((value) => !value)}>{formatProductTrendSelectionLabel(selection)}</Button>;
+
+  return <Popover active={active} activator={activator} autofocusTarget="container" onClose={() => setActive(false)} preferredAlignment="right">
+    <div className="tmr-product-range-popover">
+      <div className="tmr-product-range-options" role="menu">
+        {PRODUCT_TREND_PRESETS.map((option) => <button className={selection.preset === option.value ? "is-active" : ""} key={option.value} onClick={() => choosePreset(option.value)} role="menuitemradio" type="button" aria-checked={selection.preset === option.value}>
+          <span className="tmr-product-range-radio" aria-hidden="true" />
+          <span>{option.label}</span>
+        </button>)}
+      </div>
+      {customOpen && <div className="tmr-product-range-custom">
+        <TextField autoComplete="off" label="Start date" onChange={setCustomStart} type="date" value={customStart} />
+        <TextField autoComplete="off" label="End date" onChange={setCustomEnd} type="date" value={customEnd} />
+        <div className="tmr-product-range-actions"><Button disabled={customDisabled} onClick={applyCustom} size="slim" variant="primary">Apply</Button></div>
+      </div>}
+    </div>
+  </Popover>;
+}
+
+function ReviewVolumeTrend({ points, totalReviews, rangeLabel }: { points: ProductDetail["trendPoints"]; totalReviews: number; rangeLabel: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [hoveredPoint, setHoveredPoint] = useState<{ point: ProductDetail["monthlyRatings"][number]; index: number; x: number; y: number; alignLeft: boolean } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ point: ProductDetail["trendPoints"][number]; index: number; x: number; y: number; alignLeft: boolean } | null>(null);
   const maxReviews = useMemo(() => Math.max(1.2, Math.ceil(Math.max(...points.map((point) => point.review_count), 0) * 1.2 * 5) / 5), [points]);
+  const majorTickStep = useMemo(() => Math.max(1, Math.ceil(points.length / 12)), [points.length]);
   const path = useMemo(() => {
     const width = 720;
     const height = 190;
@@ -44,7 +140,7 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
     }).join(" ");
   }, [maxReviews, points]);
 
-  const showTooltip = useCallback((point: ProductDetail["monthlyRatings"][number], index: number, target: SVGCircleElement) => {
+  const showTooltip = useCallback((point: ProductDetail["trendPoints"][number], index: number, target: SVGCircleElement) => {
     const container = containerRef.current;
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
@@ -60,7 +156,7 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
     });
   }, []);
 
-  return <div ref={containerRef} className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
+  return <div ref={containerRef} className="tmr-product-trend" aria-label={`Review count trend for ${rangeLabel}`} onMouseLeave={() => setHoveredPoint(null)}>
     <div className="tmr-product-trend-scroll">
       <svg viewBox="0 0 720 190" role="img">
         <rect className="tmr-product-trend-panel" x="30" y="20" width="660" height="150" rx="4" />
@@ -71,15 +167,15 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
         })}
         {points.map((point, index) => {
           const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
-          return <line key={point.month} className="tmr-product-trend-vertical" x1={x} x2={x} y1="20" y2="170" />;
+          return (index % majorTickStep === 0 || index === points.length - 1) ? <line key={point.key} className="tmr-product-trend-vertical" x1={x} x2={x} y1="20" y2="170" /> : null;
         })}
         {path && <path d={path} />}
         {points.map((point, index) => {
           const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
           const y = 170 - ((point.review_count / maxReviews) * 150);
-          return <g className="tmr-product-trend-point" key={point.month}>
-            <circle aria-label={`${monthLabel(point.month)}: ${point.review_count} review(s)`} cx={x} cy={y} onBlur={() => setHoveredPoint(null)} onFocus={(event) => showTooltip(point, index, event.currentTarget)} onMouseEnter={(event) => showTooltip(point, index, event.currentTarget)} r="5" tabIndex={0} />
-            <text className="tmr-product-trend-month" pointerEvents="none" x={x} y="187" textAnchor="middle">{monthLabel(point.month)}</text>
+          return <g className="tmr-product-trend-point" key={point.key}>
+            <circle aria-label={`${point.label}: ${point.review_count} review(s)`} cx={x} cy={y} onBlur={() => setHoveredPoint(null)} onFocus={(event) => showTooltip(point, index, event.currentTarget)} onMouseEnter={(event) => showTooltip(point, index, event.currentTarget)} r="5" tabIndex={0} />
+            {(index % majorTickStep === 0 || index === points.length - 1) && <text className="tmr-product-trend-month" pointerEvents="none" x={x} y="187" textAnchor="middle">{point.label}</text>}
           </g>;
         })}
       </svg>
@@ -93,12 +189,14 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
 
 export function ProductDetailPanel({ productId, request, onError, onClearError }: ProductDetailPanelProps) {
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [trendSelection, setTrendSelection] = useState<ProductTrendSelection>(() => initialTrendSelection());
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await request<ProductDetail>(`/api/admin/products/${encodeURIComponent(productId)}`);
+      const query = trendQuery(trendSelection);
+      const response = await request<ProductDetail>(`/api/admin/products/${encodeURIComponent(productId)}?${query}`);
       setProduct(response);
       onClearError();
     } catch (issue) {
@@ -106,9 +204,14 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
     } finally {
       setLoading(false);
     }
-  }, [onClearError, onError, productId, request]);
+  }, [onClearError, onError, productId, request, trendSelection]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const changeTrendSelection = (selection: ProductTrendSelection) => {
+    setTrendSelection(selection);
+    syncTrendUrl(selection);
+  };
 
   if (!product && loading) return <div className="tmr-product-detail-loading"><Text as="p" tone="subdued">Loading product details…</Text></div>;
   if (!product) return <div className="tmr-product-detail-loading"><Button url="/settings?section=product-management">Back to Product management</Button></div>;
@@ -130,13 +233,16 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
     </Card>
 
     <Card>
-      <div className="tmr-product-stat-heading"><Text as="h2" variant="headingMd">Product statistics</Text><Text as="p" tone="subdued">Last 12 months</Text></div>
-      <div className="tmr-product-stat-cards">
-        <div><Text as="p" tone="subdued">Total reviews</Text><Text as="p" variant="headingLg">{product.review_count}</Text></div>
-        <div><Text as="p" tone="subdued">Reviews with media</Text><Text as="p" variant="headingLg">0</Text></div>
-        <div><Text as="p" tone="subdued">Average rating</Text><Text as="p" variant="headingLg">{product.average_rating ? product.average_rating.toFixed(1) : "—"}</Text></div>
+      <div className="tmr-product-stat-heading">
+        <Text as="h2" variant="headingMd">Product statistics</Text>
+        <ProductTrendRangePicker selection={trendSelection} onChange={changeTrendSelection} />
       </div>
-      <ReviewVolumeTrend points={product.monthlyRatings} totalReviews={product.review_count} />
+      <div className="tmr-product-stat-cards">
+        <div><Text as="p" tone="subdued">Total reviews</Text><Text as="p" variant="headingLg">{product.trendReviewCount}</Text></div>
+        <div><Text as="p" tone="subdued">Reviews with media</Text><Text as="p" variant="headingLg">0</Text></div>
+        <div><Text as="p" tone="subdued">Average rating</Text><Text as="p" variant="headingLg">{product.trendAverageRating ? product.trendAverageRating.toFixed(1) : "—"}</Text></div>
+      </div>
+      <ReviewVolumeTrend points={product.trendPoints} totalReviews={product.trendReviewCount} rangeLabel={formatProductTrendSelectionLabel(trendSelection)} />
     </Card>
 
     <ReviewsPanel compact productId={productId} request={request} onError={onError} onClearError={onClearError} />

@@ -11,6 +11,14 @@
 .tmr-product-detail-facts .Polaris-Text--root:nth-of-type(2) { margin-bottom: .75rem; overflow-wrap: anywhere; }
 .tmr-product-stat-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .tmr-product-stat-heading .Polaris-Text--root { margin: 0; }
+.tmr-product-range-popover { width: 14rem; padding: .45rem; }
+.tmr-product-range-options { display: grid; gap: .15rem; }
+.tmr-product-range-options button { display: grid; grid-template-columns: 1rem 1fr; align-items: center; gap: .55rem; width: 100%; padding: .42rem .5rem; border: 0; border-radius: .35rem; background: transparent; color: #202223; cursor: pointer; font: inherit; text-align: left; }
+.tmr-product-range-options button:hover, .tmr-product-range-options button.is-active { background: #f1f2f4; }
+.tmr-product-range-radio { width: .75rem; height: .75rem; border: 1px solid #8c9196; border-radius: 50%; background: #fff; }
+.tmr-product-range-options button.is-active .tmr-product-range-radio { border: .25rem solid #4a4a4a; }
+.tmr-product-range-custom { display: grid; gap: .65rem; margin-top: .45rem; padding: .65rem .45rem .35rem; border-top: 1px solid var(--tmr-line); }
+.tmr-product-range-actions { display: flex; justify-content: flex-end; }
 .tmr-product-stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
 .tmr-product-stat-cards > div { display: grid; gap: .4rem; border: 1px solid var(--tmr-line); border-radius: .55rem; padding: 1rem; }
 .tmr-product-stat-cards .Polaris-Text--root { margin: 0; }
