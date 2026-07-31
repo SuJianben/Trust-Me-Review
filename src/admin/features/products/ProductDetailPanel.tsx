@@ -252,7 +252,6 @@ export function ProductDetailPanel({ productId, request, onError, onClearError }
       {activeStat === "media" && !product.trendMediaReviewCount && <div className="tmr-product-stat-empty"><Text as="p" tone="subdued">No reviews with media in this date range.</Text></div>}
     </Card>
 
-    {activeStat === "total" && <ReviewsPanel compact productId={productId} request={request} onError={onError} onClearError={onClearError} />}
-    {activeStat === "media" && product.trendMediaReviewCount > 0 && <ReviewsPanel compact productId={productId} request={request} onError={onError} onClearError={onClearError} />}
+    <ReviewsPanel compact productId={productId} request={request} onError={onError} onClearError={onClearError} />
   </div>;
 }
