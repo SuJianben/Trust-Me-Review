@@ -41,6 +41,7 @@ export type AdminProductDetail = AdminProductSummary & {
   trendRangeLabel: string;
   trendRangePreset: ProductTrendPreset;
   trendReviewCount: number;
+  trendMediaReviewCount: number;
   trendAverageRating: number;
   trendPoints: ProductTrendPoint[];
 };
@@ -151,6 +152,7 @@ export async function getAdminProductDetail(
     trendRangeLabel: selection.label,
     trendRangePreset: selection.preset,
     trendReviewCount: trendSummary.reviewCount,
+    trendMediaReviewCount: 0,
     trendAverageRating: trendSummary.averageRating,
     trendPoints: buildProductTrendSeries(reviews.rows, selection),
   };
