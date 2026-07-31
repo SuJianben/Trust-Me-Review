@@ -63,10 +63,15 @@ function ReviewVolumeTrend({ points, totalReviews }: { points: ProductDetail["mo
   return <div ref={containerRef} className="tmr-product-trend" aria-label="Monthly review count over the last 12 months" onMouseLeave={() => setHoveredPoint(null)}>
     <div className="tmr-product-trend-scroll">
       <svg viewBox="0 0 720 190" role="img">
+        <rect className="tmr-product-trend-panel" x="30" y="20" width="660" height="150" rx="4" />
         {Array.from({ length: 7 }, (_, index) => index).map((index) => {
           const value = (maxReviews / 6) * index;
           const y = 170 - ((value / maxReviews) * 150);
           return <g key={value}><line x1="30" x2="690" y1={y} y2={y} /><text x="8" y={y + 4}>{Number.isInteger(value) ? value : value.toFixed(1)}</text></g>;
+        })}
+        {points.map((point, index) => {
+          const x = 30 + ((660 * index) / Math.max(1, points.length - 1));
+          return <line key={point.month} className="tmr-product-trend-vertical" x1={x} x2={x} y1="20" y2="170" />;
         })}
         {path && <path d={path} />}
         {points.map((point, index) => {
