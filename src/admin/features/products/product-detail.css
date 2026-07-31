@@ -1,4 +1,4 @@
-.tmr-product-detail-page { display: grid; gap: 1rem; max-width: 74rem; margin: 0 auto; }
+.tmr-product-detail-page { display: grid; gap: 1rem; width: 100%; min-width: 0; max-width: 74rem; margin: 0; }
 .tmr-product-detail-loading { max-width: 74rem; margin: 2rem auto; }
 .tmr-product-detail-header { display: grid; grid-template-columns: auto 4.1rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: .35rem 0; }
 .tmr-product-detail-header .Polaris-Text--root { margin: 0; }
