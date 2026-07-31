@@ -20,9 +20,9 @@
 .tmr-product-range-custom { display: grid; gap: .65rem; margin-top: .45rem; padding: .65rem .45rem .35rem; border-top: 1px solid var(--tmr-line); }
 .tmr-product-range-actions { display: flex; justify-content: flex-end; }
 .tmr-product-stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
-.tmr-product-stat-cards > button { display: grid; gap: .4rem; border: 1px solid var(--tmr-line); border-radius: .55rem; padding: 1rem; background: #fff; color: inherit; cursor: pointer; font: inherit; text-align: left; transition: border-color .15s ease, box-shadow .15s ease; }
-.tmr-product-stat-cards > button:hover { border-color: #8c9196; }
-.tmr-product-stat-cards > button.is-active { border-color: #005bd3; box-shadow: 0 0 0 1px #005bd3; }
+.tmr-product-stat-cards > div { display: grid; gap: .4rem; border: 1px solid var(--tmr-line); border-radius: .55rem; padding: 1rem; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+.tmr-product-stat-cards > div:hover { border-color: #8c9196; }
+.tmr-product-stat-cards > div.is-active { border-color: #005bd3; box-shadow: 0 0 0 1px #005bd3; }
 .tmr-product-stat-cards .Polaris-Text--root { margin: 0; }
 .tmr-product-stat-empty { padding: 2.75rem 1rem; text-align: center; }
 .tmr-product-trend { position: relative; overflow: visible; margin-top: 1.25rem; }
