@@ -75,7 +75,7 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
 
   return <Card>
     <div className="tmr-section-heading">
-      <div className="tmr-panel-note"><Text as="h1" variant="headingLg">Review requests</Text><Text as="p" tone="subdued">Test invitations are recorded here. V1 does not send a real customer email.</Text></div>
+      <div className="tmr-panel-note"><Text as="h2" variant="headingLg">Test delivery records</Text><Text as="p" tone="subdued">V1 records a test invitation and secure review link. It does not send a real customer email.</Text></div>
       <div style={{ display: "flex", gap: 8 }}><Button onClick={() => void processDueDeliveries()} loading={processing}>Run due deliveries</Button><Button onClick={() => void load()} loading={loading}>Refresh</Button></div>
     </div>
     {notice && <Text as="p">{notice}</Text>}

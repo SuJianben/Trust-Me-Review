@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { AuthenticatedRequest } from "../../api";
 import { ProductManagementPanel } from "./ProductManagementPanel";
+import { EmailTemplatesPanel } from "./EmailTemplatesPanel";
+import { RequestSchedulingPanel } from "./RequestSchedulingPanel";
+import { ReviewRequestsPanel } from "./ReviewRequestsPanel";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { SettingsPanel } from "./SettingsPanel";
 import type { SettingsSection } from "./types";
@@ -28,6 +31,12 @@ export function SettingsWorkspace({ request, onError, onClearError = () => undef
       <SettingsNavigation activeSection={activeSection} onSelect={selectSection} />
       {showProductDetail && productId ? (
         <ProductDetailPanel productId={productId} request={request} onError={onError} onClearError={onClearError} />
+      ) : activeSection === "review-requests" ? (
+        <ReviewRequestsPanel request={request} onError={onError} />
+      ) : activeSection === "request-scheduling" ? (
+        <RequestSchedulingPanel request={request} onError={onError} />
+      ) : activeSection === "templates" ? (
+        <EmailTemplatesPanel request={request} onError={onError} />
       ) : activeSection === "product-management" ? (
         <ProductManagementPanel request={request} onError={onError} />
       ) : (
