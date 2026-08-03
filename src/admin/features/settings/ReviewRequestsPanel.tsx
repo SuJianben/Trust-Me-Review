@@ -1,38 +1,90 @@
-import { Banner, Button, Card, Checkbox, Text } from "@shopify/polaris";
-import type { AuthenticatedRequest } from "../../api";
-import { TestDeliveriesPanel } from "../deliveries/TestDeliveriesPanel";
-import { useShopSettings } from "./useShopSettings";
+import { Button, Card, Text } from "@shopify/polaris";
+import "./review-requests.css";
 
 type Props = {
-  request: AuthenticatedRequest;
-  onError: (message: string) => void;
+  onManageEmailRequests: () => void;
 };
 
-export function ReviewRequestsPanel({ request, onError }: Props) {
-  const { settings, setSettings, loading, saving, saved, save } = useShopSettings({ request, onError });
+type ChannelItem = {
+  title: string;
+  description: string;
+  action: string;
+  available?: boolean;
+  status?: string;
+};
+
+const channels: ChannelItem[] = [
+  {
+    title: "Manage email review requests",
+    description: "Collect product reviews automatically after a customer order is fulfilled.",
+    action: "Manage",
+    available: true,
+    status: "Active",
+  },
+  {
+    title: "Links, QR codes and point of sale review collection",
+    description: "Share review links or QR codes in store materials and customer communications.",
+    action: "Coming soon",
+  },
+  {
+    title: "SMS requests",
+    description: "Connect an SMS provider to deliver review requests by text message.",
+    action: "Coming soon",
+    status: "Planned",
+  },
+  {
+    title: "Push notifications",
+    description: "Send review reminders through supported push-notification providers.",
+    action: "Coming soon",
+    status: "Planned",
+  },
+  {
+    title: "WhatsApp and email marketing integrations",
+    description: "Connect future marketing integrations for additional review-collection channels.",
+    action: "Coming soon",
+  },
+];
+
+export function ReviewRequestsPanel({ onManageEmailRequests }: Props) {
 
   return (
     <div className="tmr-settings-content">
       <div className="tmr-settings-content-heading">
         <div>
           <Text as="h1" variant="headingLg">Review requests</Text>
-          <Text as="p" tone="subdued">Manage the test review invitations created after an order is fulfilled.</Text>
+          <Text as="p" tone="subdued">Choose how customers are invited to leave a product review.</Text>
         </div>
       </div>
 
       <Card>
-        <div className="tmr-settings-form-heading">
-          <Text as="h2" variant="headingMd">Automatic requests</Text>
-          <Text as="p" tone="subdued">When enabled, fulfilled orders can create one review request for each eligible product.</Text>
+        <div className="tmr-request-group-heading">
+          <Text as="h2" variant="headingMd">Email review requests</Text>
+          <Text as="p" tone="subdued">Send and manage review invitations for eligible fulfilled orders.</Text>
         </div>
-        {saved && <Banner tone="success">Review request settings saved.</Banner>}
-        <div className="tmr-settings-form-control">
-          <Checkbox label="Enable automatic review requests" checked={settings.request_enabled} disabled={loading} onChange={(value) => setSettings((current) => ({ ...current, request_enabled: value }))} />
+        <div className="tmr-request-entry-list">
+          <div className="tmr-request-entry tmr-request-entry-muted">
+            <div><Text as="h3" variant="headingSm">Request reviews from previous Shopify orders</Text><Text as="p" tone="subdued">Schedule review requests in batches for orders placed before the app was installed.</Text></div>
+            <Button disabled>Coming soon</Button>
+          </div>
+          <div className="tmr-request-entry tmr-request-entry-muted">
+            <div><Text as="h3" variant="headingSm">Request reviews from customer segments or lists</Text><Text as="p" tone="subdued">Create requests from customer groups, imports, or individual customers outside Shopify.</Text></div>
+            <Button disabled>Coming soon</Button>
+          </div>
         </div>
-        <Button variant="primary" loading={saving} disabled={loading} onClick={() => void save()}>Save request setting</Button>
       </Card>
 
-      <TestDeliveriesPanel request={request} onError={onError} />
+      <Card>
+        <div className="tmr-request-group-heading"><Text as="h2" variant="headingMd">Collection channels</Text></div>
+        <div className="tmr-request-entry-list">
+          {channels.map((channel) => <div className={`tmr-request-entry ${channel.available ? "tmr-request-entry-available" : "tmr-request-entry-muted"}`} key={channel.title}>
+            <div>
+              <div className="tmr-request-entry-title"><Text as="h3" variant="headingSm">{channel.title}</Text>{channel.status && <span className={channel.available ? "tmr-request-status-active" : "tmr-request-status-planned"}>{channel.status}</span>}</div>
+              <Text as="p" tone="subdued">{channel.description}</Text>
+            </div>
+            {channel.available ? <Button onClick={onManageEmailRequests}>{channel.action}</Button> : <Button disabled>{channel.action}</Button>}
+          </div>)}
+        </div>
+      </Card>
     </div>
   );
 }
