@@ -1,13 +1,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type pg from "pg";
-import { z } from "zod";
 import type { Env, QueueJob, ReviewStatus } from "./types";
 import { withDb, audit } from "./services/db";
 import { validWebhook, verifyTurnstile } from "./services/shopify";
 import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/auth";
 import { ensureManagedShop } from "./features/shops/service";
-import { blocklistEntrySchema, publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
+import { blocklistEntrySchema, publicReviewSchema, invitationBatchReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductSnapshots } from "./features/products/service";
 import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
@@ -86,16 +85,59 @@ app.post("/api/storefront/reviews", async (ctx) => {
   return ctx.json({ id: result.id, status: "pending" }, 201);
 });
 
+app.get("/api/invitations/:token", async (ctx) => {
+  const tokenHash = await sha256(ctx.req.param("token"));
+  const invitation = await withDb(ctx.env, async (db) => {
+    const request = await db.query<{ shop_id: string; shopify_order_id: string }>("select shop_id,shopify_order_id from review_requests where token_hash=$1 and status in ('sent','submitted')", [tokenHash]);
+    if (!request.rowCount) return null;
+    const value = request.rows[0];
+    const products = await db.query<{ request_id: string; product_id: string; product_title: string; status: "sent" | "submitted" }>(`
+      select rr.id request_id,p.shopify_product_id product_id,p.title_snapshot product_title,rr.status
+      from review_requests rr join products p on p.id=rr.product_id
+      where rr.shop_id=$1 and rr.shopify_order_id=$2 and rr.status in ('sent','submitted')
+      order by rr.created_at asc`, [value.shop_id, value.shopify_order_id]);
+    return { orderId: value.shopify_order_id, products: products.rows };
+  });
+  if (!invitation) return ctx.json({ error: "Invitation is invalid or already used" }, 404);
+  return ctx.json(invitation);
+});
+
 app.post("/api/invitations/:token/reviews", async (ctx) => {
-  const input = invitationReviewSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
-  if (hasProhibitedText(`${input.data.title ?? ""} ${input.data.body}`)) return ctx.json({ error: "Submission was rejected" }, 422);
+  const input = invitationBatchReviewSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
+  if (input.data.reviews.some((review) => hasProhibitedText(`${review.title ?? ""} ${review.body}`))) return ctx.json({ error: "Submission was rejected" }, 422);
   const tokenHash = await sha256(ctx.req.param("token"));
   const created = await withDb(ctx.env, async (db) => {
-    const request = await db.query<{ id: string; shop_id: string; product_id: string; shopify_order_id: string; shopify_variant_id: string | null; customer_email_hash: string }>("select id,shop_id,product_id,shopify_order_id,shopify_variant_id,customer_email_hash from review_requests where token_hash=$1 and status='sent' for update", [tokenHash]); if (!request.rowCount) return null;
-    const value = request.rows[0]; const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,author_email_hash,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','invitation',true) returning id", [value.shop_id,value.product_id,value.shopify_order_id,value.shopify_variant_id,input.data.rating,input.data.title ?? null,input.data.body,input.data.authorName,value.customer_email_hash]);
-    await db.query("update review_requests set status='submitted',submitted_at=now() where id=$1", [value.id]); return review.rows[0];
+    await db.query("begin");
+    try {
+      const request = await db.query<{ shop_id: string; shopify_order_id: string }>("select shop_id,shopify_order_id from review_requests where token_hash=$1 and status in ('sent','submitted') for update", [tokenHash]);
+      if (!request.rowCount) { await db.query("rollback"); return null; }
+      const value = request.rows[0];
+      const requestedIds = input.data.reviews.map((review) => review.requestId);
+      const requests = await db.query<{ id: string; product_id: string; shopify_variant_id: string | null; customer_email_hash: string }>(`
+        select id,product_id,shopify_variant_id,customer_email_hash
+        from review_requests
+        where shop_id=$1 and shopify_order_id=$2 and id = any($3::uuid[]) and status='sent'
+        for update`, [value.shop_id, value.shopify_order_id, requestedIds]);
+      if (requests.rowCount !== requestedIds.length) { await db.query("rollback"); return "unavailable" as const; }
+      const requestsById = new Map(requests.rows.map((row) => [row.id, row]));
+      const reviewIds: string[] = [];
+      for (const reviewInput of input.data.reviews) {
+        const target = requestsById.get(reviewInput.requestId)!;
+        const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,author_email_hash,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','invitation',true) returning id", [value.shop_id,target.product_id,value.shopify_order_id,target.shopify_variant_id,reviewInput.rating,reviewInput.title ?? null,reviewInput.body,input.data.authorName,target.customer_email_hash]);
+        reviewIds.push(review.rows[0].id);
+        await db.query("update review_requests set status='submitted',submitted_at=now(),updated_at=now() where id=$1", [target.id]);
+      }
+      await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'invitation_review_batch_submitted',$2)", [value.shop_id, JSON.stringify({ orderId: value.shopify_order_id, productCount: reviewIds.length, verifiedPurchase: true })]);
+      await db.query("commit");
+      return reviewIds;
+    } catch (error) {
+      try { await db.query("rollback"); } catch { /* preserve the original error */ }
+      throw error;
+    }
   });
-  if (!created) return ctx.json({ error: "Invitation is invalid or already used" }, 404); return ctx.json({ id: created.id, status: "pending", verifiedPurchase: true }, 201);
+  if (!created) return ctx.json({ error: "Invitation is invalid or already used" }, 404);
+  if (created === "unavailable") return ctx.json({ error: "One or more requested products are no longer available" }, 409);
+  return ctx.json({ ids: created, status: "pending", verifiedPurchase: true }, 201);
 });
 
 app.get("/api/admin/dashboard", async (ctx) => {

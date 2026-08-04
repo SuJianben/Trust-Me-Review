@@ -1,0 +1,87 @@
+.tmr-invitation-page {
+  min-height: 100vh;
+  background: #f6f7f9;
+}
+
+.tmr-invitation-page .Polaris-Page {
+  max-width: 760px;
+  padding-block: 32px 48px;
+}
+
+.tmr-invitation-intro,
+.tmr-invitation-form,
+.tmr-invitation-product,
+.tmr-invitation-actions {
+  display: grid;
+  gap: 16px;
+}
+
+.tmr-invitation-intro {
+  margin-bottom: 20px;
+}
+
+.tmr-invitation-product {
+  padding: 20px;
+  border: 1px solid #dfe3e8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tmr-invitation-product__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tmr-invitation-rating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tmr-invitation-star {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #b7c2d0;
+  border-radius: 8px;
+  color: #7b8794;
+  background: #fff;
+  cursor: pointer;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.tmr-invitation-star:hover,
+.tmr-invitation-star:focus-visible,
+.tmr-invitation-star.is-selected {
+  border-color: #14866d;
+  color: #14866d;
+  background: #eef9f5;
+  outline: none;
+}
+
+.tmr-invitation-product--submitted {
+  border-color: #9be6bb;
+  background: #f5fff8;
+}
+
+.tmr-invitation-product__submitted-note {
+  color: #17663f;
+}
+
+.tmr-invitation-actions {
+  justify-items: start;
+  padding-top: 4px;
+}
+
+@media (max-width: 749px) {
+  .tmr-invitation-page .Polaris-Page {
+    padding: 20px 16px 32px;
+  }
+
+  .tmr-invitation-product {
+    padding: 16px;
+  }
+}

@@ -1,6 +1,28 @@
 import { z } from "zod";
 export const publicReviewSchema = z.object({ shopDomain: z.string().min(3), productId: z.string().min(1), productTitle: z.string().trim().max(255).optional(), rating: z.number().int().min(1).max(5), title: z.string().max(120).optional(), body: z.string().trim().min(10).max(3000), authorName: z.string().trim().min(1).max(120), website: z.string().max(0).optional(), turnstileToken: z.string().min(1) });
-export const invitationReviewSchema = publicReviewSchema.omit({ shopDomain: true, productId: true, turnstileToken: true, website: true });
+const invitationReviewItemSchema = z.object({
+  requestId: z.string().uuid(),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().trim().max(120).optional().transform((value) => value || undefined),
+  body: z.string().trim().min(1).max(3000),
+});
+
+/**
+ * A verified invitation can submit several product reviews from one order.
+ * The customer's display name is intentionally shared once at order level.
+ */
+export const invitationBatchReviewSchema = z.object({
+  authorName: z.string().trim().min(1).max(120),
+  reviews: z.array(invitationReviewItemSchema).min(1).max(10),
+}).superRefine((value, context) => {
+  const requestIds = new Set<string>();
+  value.reviews.forEach((review, index) => {
+    if (requestIds.has(review.requestId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["reviews", index, "requestId"], message: "A product can only be submitted once per batch." });
+    }
+    requestIds.add(review.requestId);
+  });
+});
 export const reviewStatusSchema = z.enum(["pending", "published", "hidden", "deleted"]);
 export const moderationSchema = z.object({ status: reviewStatusSchema.optional(), pinned: z.boolean().optional() }).refine(
   (update) => update.status !== undefined || update.pinned !== undefined,
