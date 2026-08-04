@@ -2,6 +2,17 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character
 const endpoint = (element) => `${element.dataset.api.replace(/\/$/, "")}/api/storefront/products/${element.dataset.productId}/reviews?shop=${encodeURIComponent(element.dataset.shop)}`;
 const resetTurnstile = () => window.turnstile?.reset?.();
 const stars = (rating) => `${"★".repeat(Math.round(rating))}${"☆".repeat(5 - Math.round(rating))}`;
+const mediaUrl = (widget, mediaId) => `${widget.dataset.api.replace(/\/$/, "")}/api/review-media/${encodeURIComponent(mediaId)}`;
+
+function renderReviewMedia(widget, media) {
+  if (!Array.isArray(media) || !media.length) return "";
+  return `<div class="tmr-review-media">${media.map((item) => {
+    const url = mediaUrl(widget, item.id);
+    return item.kind === "video"
+      ? `<video class="tmr-review-media__video" controls preload="metadata"><source src="${url}" type="video/mp4"/></video>`
+      : `<a href="${url}" target="_blank" rel="noopener"><img class="tmr-review-media__image" src="${url}" alt="Customer review image" loading="lazy"/></a>`;
+  }).join("")}</div>`;
+}
 
 function renderDistribution(widget, distribution, total) {
   widget.querySelector(".tmr-distribution").innerHTML = [5, 4, 3, 2, 1].map((rating) => {
@@ -27,6 +38,7 @@ async function loadReviews(widget) {
         <div class="tmr-stars">${stars(review.rating)}</div>
         <strong>${escapeHtml(review.title || "")}</strong>
         <p>${escapeHtml(review.body)}</p>
+        ${renderReviewMedia(widget, review.media)}
         <div class="tmr-meta">${escapeHtml(review.author_name)}${review.verified_purchase ? " · Verified purchase" : ""}</div>
         ${review.reply_body ? `<p><strong>Store reply:</strong> ${escapeHtml(review.reply_body)}</p>` : ""}
       </article>`).join("") || "<p>No reviews match this selection.</p>";

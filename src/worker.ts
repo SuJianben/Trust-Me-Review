@@ -8,6 +8,8 @@ import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/aut
 import { ensureManagedShop } from "./features/shops/service";
 import { blocklistEntrySchema, publicReviewSchema, invitationBatchReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
+import { validateReviewMedia } from "./features/reviews/media-rules";
+import { deleteReviewMediaObjects, removeExpiredReviewMedia } from "./features/reviews/media-service";
 import { refreshMissingProductSnapshots } from "./features/products/service";
 import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
@@ -23,6 +25,7 @@ app.onError((error, ctx) => {
   return ctx.json({ error: "Internal server error" }, 500);
 });
 app.use("/api/storefront/*", cors({ origin: "*", allowMethods: ["GET", "POST"] }));
+app.use("/api/review-media/*", cors({ origin: "*", allowMethods: ["GET"] }));
 app.use("/api/admin/*", async (ctx, next) => {
   const admin = await verifyAdminSession(ctx.req.raw, ctx.env);
   if (!admin) return ctx.json({ error: "Unauthorized" }, 401);
@@ -102,6 +105,67 @@ app.get("/api/invitations/:token", async (ctx) => {
   return ctx.json(invitation);
 });
 
+app.post("/api/invitations/:token/media", async (ctx) => {
+  const form = await ctx.req.formData();
+  const requestId = form.get("requestId");
+  const file = form.get("file");
+  if (typeof requestId !== "string" || !(file instanceof File)) return ctx.json({ error: "A product and file are required." }, 400);
+  const validation = validateReviewMedia(file.type, file.size);
+  if (!validation.ok) return ctx.json({ error: validation.error }, 400);
+  const tokenHash = await sha256(ctx.req.param("token"));
+  const upload = await withDb(ctx.env, async (db) => {
+    const request = await db.query<{ shop_id: string }>(`
+      select target.shop_id
+      from review_requests source
+      join review_requests target on target.shop_id=source.shop_id and target.shopify_order_id=source.shopify_order_id
+      where source.token_hash=$1 and source.status in ('sent','submitted') and target.id=$2 and target.status='sent'`, [tokenHash, requestId]);
+    return request.rows[0] ?? null;
+  });
+  if (!upload) return ctx.json({ error: "This product invitation is no longer available." }, 409);
+  const extension = validation.kind === "video" ? "mp4" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const objectKey = `reviews/${upload.shop_id}/${requestId}/${crypto.randomUUID()}.${extension}`;
+  await ctx.env.REVIEW_MEDIA.put(objectKey, file, { httpMetadata: { contentType: file.type } });
+  try {
+    const media = await withDb(ctx.env, async (db) => db.query<{ id: string }>(`
+      insert into review_media(shop_id,review_request_id,object_key,media_kind,content_type,byte_size)
+      values($1,$2,$3,$4,$5,$6) returning id`, [upload.shop_id, requestId, objectKey, validation.kind, file.type, file.size]));
+    console.info("invitation_review_media_uploaded", { requestId, kind: validation.kind, byteSize: file.size });
+    return ctx.json({ id: media.rows[0].id, kind: validation.kind }, 201);
+  } catch (error) {
+    await ctx.env.REVIEW_MEDIA.delete(objectKey);
+    throw error;
+  }
+});
+
+app.delete("/api/invitations/:token/media/:id", async (ctx) => {
+  const tokenHash = await sha256(ctx.req.param("token"));
+  const media = await withDb(ctx.env, async (db) => {
+    const row = await db.query<{ object_key: string }>(`
+      select rm.object_key
+      from review_media rm
+      join review_requests target on target.id=rm.review_request_id
+      join review_requests source on source.shop_id=target.shop_id and source.shopify_order_id=target.shopify_order_id
+      where source.token_hash=$1 and source.status in ('sent','submitted') and rm.id=$2 and rm.review_id is null`, [tokenHash, ctx.req.param("id")]);
+    if (!row.rowCount) return null;
+    await db.query("delete from review_media where id=$1", [ctx.req.param("id")]);
+    return row.rows[0];
+  });
+  if (!media) return ctx.json({ error: "Media upload not found." }, 404);
+  await ctx.env.REVIEW_MEDIA.delete(media.object_key);
+  return ctx.json({ ok: true });
+});
+
+app.get("/api/review-media/:id", async (ctx) => {
+  const media = await withDb(ctx.env, async (db) => db.query<{ object_key: string; content_type: string }>(`
+    select rm.object_key,rm.content_type from review_media rm
+    join reviews r on r.id=rm.review_id
+    where rm.id=$1 and r.status='published'`, [ctx.req.param("id")]));
+  if (!media.rowCount) return ctx.text("Not found", 404);
+  const object = await ctx.env.REVIEW_MEDIA.get(media.rows[0].object_key);
+  if (!object) return ctx.text("Not found", 404);
+  return new Response(object.body, { headers: { "content-type": media.rows[0].content_type, "cache-control": "public, max-age=86400", etag: object.httpEtag } });
+});
+
 app.post("/api/invitations/:token/reviews", async (ctx) => {
   const input = invitationBatchReviewSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
   if (input.data.reviews.some((review) => hasProhibitedText(`${review.title ?? ""} ${review.body}`))) return ctx.json({ error: "Submission was rejected" }, 422);
@@ -125,6 +189,7 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
         const target = requestsById.get(reviewInput.requestId)!;
         const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,author_email_hash,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','invitation',true) returning id", [value.shop_id,target.product_id,value.shopify_order_id,target.shopify_variant_id,reviewInput.rating,reviewInput.title ?? null,reviewInput.body,input.data.authorName,target.customer_email_hash]);
         reviewIds.push(review.rows[0].id);
+        await db.query("update review_media set review_id=$1 where shop_id=$2 and review_request_id=$3 and review_id is null", [review.rows[0].id, value.shop_id, target.id]);
         await db.query("update review_requests set status='submitted',submitted_at=now(),updated_at=now() where id=$1", [target.id]);
       }
       await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'invitation_review_batch_submitted',$2)", [value.shop_id, JSON.stringify({ orderId: value.shopify_order_id, productCount: reviewIds.length, verifiedPurchase: true })]);
@@ -386,13 +451,13 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     await withDb(env, async (db) => {
       const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [job.shopDomain]);
       if (job.topic === "shop/redact") {
-        if (shop.rowCount) await eraseShopData(db, shop.rows[0].id);
+        if (shop.rowCount) await deleteReviewMediaObjects(env.REVIEW_MEDIA, await eraseShopData(db, shop.rows[0].id));
         else await markWebhookProcessed(db, job.deliveryId);
         return;
       }
       if (shop.rowCount) {
         if (job.topic === "customers/data_request") await recordDataRequest(db, shop.rows[0].id);
-        else await redactCustomerData(db, shop.rows[0].id, job.payload);
+        else await deleteReviewMediaObjects(env.REVIEW_MEDIA, await redactCustomerData(db, shop.rows[0].id, job.payload));
       }
       await markWebhookProcessed(db, job.deliveryId);
     });
@@ -418,4 +483,4 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     });
   }
 }
-export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };
+export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); await removeExpiredReviewMedia(db,env.REVIEW_MEDIA); })); } };

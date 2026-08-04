@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hasProhibitedText } from "../src/features/reviews/service";
 import { invitationBatchReviewSchema, moderationSchema, publicReviewSchema } from "../src/features/reviews/schemas";
+import { canAddReviewMedia, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, validateReviewMedia } from "../src/features/reviews/media-rules";
 describe("review submission rules", () => {
   it("rejects prohibited content", () => { expect(hasProhibitedText("Visit our CASINO now")).toBe(true); expect(hasProhibitedText("Fits as expected and feels great.")).toBe(false); });
   it("requires anti-bot token and meaningful body", () => { expect(publicReviewSchema.safeParse({shopDomain:"demo.myshopify.com",productId:"1",productTitle:"Demo product",rating:5,authorName:"Sam",body:"Great product",turnstileToken:"token"}).success).toBe(true); expect(publicReviewSchema.safeParse({shopDomain:"demo.myshopify.com",productId:"1",rating:5,authorName:"Sam",body:"short"}).success).toBe(false); });
@@ -25,5 +26,14 @@ describe("review submission rules", () => {
     const requestId = "5c636458-c28b-4f26-aaca-42df2ddd4ee3";
     expect(invitationBatchReviewSchema.safeParse({ authorName: "Jordan", reviews: [{ requestId, rating: 5, body: "" }] }).success).toBe(false);
     expect(invitationBatchReviewSchema.safeParse({ authorName: "Jordan", reviews: [{ requestId, rating: 5, body: "Great" }, { requestId, rating: 4, body: "Also great" }] }).success).toBe(false);
+  });
+  it("enforces the supported media types, size limits, and per-review limits", () => {
+    expect(validateReviewMedia("image/jpeg", MAX_IMAGE_BYTES).ok).toBe(true);
+    expect(validateReviewMedia("image/jpeg", MAX_IMAGE_BYTES + 1).ok).toBe(false);
+    expect(validateReviewMedia("video/mp4", MAX_VIDEO_BYTES).ok).toBe(true);
+    expect(validateReviewMedia("video/mp4", MAX_VIDEO_BYTES + 1).ok).toBe(false);
+    expect(validateReviewMedia("application/pdf", 20).ok).toBe(false);
+    expect(canAddReviewMedia(["image", "image", "image", "image", "image"], "image")).toContain("5 images");
+    expect(canAddReviewMedia(["video"], "video")).toContain("1 video");
   });
 });

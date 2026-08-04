@@ -23,11 +23,17 @@ export async function redactCustomerData(client: pg.Client, shopId: string, payl
   const email = extractCustomerEmail(payload);
   if (!email) {
     await privacyAudit(client, shopId, "privacy_customer_redact", { redactedReviews: 0, redactedRequests: 0, reason: "email_missing" });
-    return;
+    return [] as string[];
   }
   const emailHash = await sha256(email);
   await client.query("begin");
   try {
+    const media = await client.query<{ object_key: string }>(`
+      select rm.object_key from review_media rm
+      where rm.shop_id=$1 and (
+        rm.review_request_id in (select id from review_requests where shop_id=$1 and customer_email_hash=$2)
+        or rm.review_id in (select id from reviews where shop_id=$1 and (author_email_hash=$2 or shopify_order_id in (select shopify_order_id from review_requests where shop_id=$1 and customer_email_hash=$2)))
+      )`, [shopId, emailHash]);
     const reviews = await client.query(
       `delete from reviews
        where shop_id=$1 and (author_email_hash=$2 or shopify_order_id in (
@@ -38,6 +44,7 @@ export async function redactCustomerData(client: pg.Client, shopId: string, payl
     const requests = await client.query("delete from review_requests where shop_id=$1 and customer_email_hash=$2", [shopId, emailHash]);
     await privacyAudit(client, shopId, "privacy_customer_redact", { redactedReviews: reviews.rowCount, redactedRequests: requests.rowCount });
     await client.query("commit");
+    return media.rows.map((row) => row.object_key);
   } catch (error) {
     await client.query("rollback");
     throw error;
@@ -57,10 +64,12 @@ export async function cancelOutstandingRequests(client: pg.Client, shopId: strin
 export async function eraseShopData(client: pg.Client, shopId: string) {
   await client.query("begin");
   try {
+    const media = await client.query<{ object_key: string }>("select object_key from review_media where shop_id=$1", [shopId]);
     await client.query("delete from webhook_events where shop_id=$1", [shopId]);
     await client.query("delete from analytics_events where shop_id=$1", [shopId]);
     await client.query("delete from shops where id=$1", [shopId]);
     await client.query("commit");
+    return media.rows.map((row) => row.object_key);
   } catch (error) {
     await client.query("rollback");
     throw error;

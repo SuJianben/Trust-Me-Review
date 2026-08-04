@@ -33,6 +33,8 @@
   justify-content: space-between;
   gap: 12px;
 }
+.tmr-invitation-product__heading > div { display: grid; gap: 3px; }
+.tmr-invitation-product__heading .Polaris-Text--root { margin: 0; }
 
 .tmr-invitation-rating {
   display: flex;
@@ -75,6 +77,20 @@
   justify-items: start;
   padding-top: 4px;
 }
+
+.tmr-invitation-media { display: grid; gap: 10px; }
+.tmr-invitation-media > div:first-child { display: grid; gap: 3px; }
+.tmr-invitation-media > div:first-child .Polaris-Text--root { margin: 0; }
+.tmr-invitation-media__picker { display: inline-flex; width: fit-content; position: relative; overflow: hidden; align-items: center; border: 1px solid #8c9bab; border-radius: 7px; background: #fff; color: #172b4d; font-size: 14px; font-weight: 600; cursor: pointer; }
+.tmr-invitation-media__picker:hover { border-color: #14866d; background: #f3fbf8; }
+.tmr-invitation-media__picker input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.tmr-invitation-media__picker span { padding: 9px 12px; }
+.tmr-invitation-media__picker:has(input:disabled) { opacity: .6; cursor: wait; }
+.tmr-invitation-media__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.tmr-invitation-media__item { position: relative; display: grid; gap: 5px; min-width: 0; border: 1px solid #dfe3e8; border-radius: 8px; padding: 6px; background: #fbfcfd; }
+.tmr-invitation-media__item img,.tmr-invitation-media__item video { display: block; width: 100%; height: 92px; border-radius: 5px; object-fit: cover; background: #e9eef3; }
+.tmr-invitation-media__item button { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border: 0; border-radius: 50%; background: #172b4d; color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.tmr-invitation-media__item span { overflow: hidden; color: #536273; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 749px) {
   .tmr-invitation-page .Polaris-Page {

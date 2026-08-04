@@ -1,6 +1,7 @@
 import { AppProvider, Badge, Button, Card, FormLayout, Page, Text, TextField } from "@shopify/polaris";
 import { useEffect, useMemo, useState } from "react";
 import type { InvitationOrder, ReviewDraft } from "./types";
+import { compressReviewImage, type LocalReviewMedia, removeReviewMedia, uploadReviewMedia, validateLocalMediaSelection } from "./media-client";
 import "./invitation-review.css";
 
 type Props = { token: string };
@@ -15,6 +16,8 @@ export function InvitationReviewPage({ token }: Props) {
   const [invitation, setInvitation] = useState<InvitationOrder | null>(null);
   const [authorName, setAuthorName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
+  const [media, setMedia] = useState<Record<string, LocalReviewMedia[]>>({});
+  const [uploadingRequestIds, setUploadingRequestIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +49,32 @@ export function InvitationReviewPage({ token }: Props) {
     setDrafts((current) => ({ ...current, [requestId]: { ...(current[requestId] ?? emptyDraft()), ...patch } }));
   };
 
+  const uploadFiles = async (requestId: string, files: FileList | null) => {
+    if (!files?.length) return;
+    const current = media[requestId] ?? [];
+    for (const sourceFile of Array.from(files)) {
+      const issue = validateLocalMediaSelection(current, sourceFile);
+      if (issue) { setMessage(issue); continue; }
+      setUploadingRequestIds((ids) => [...ids, requestId]);
+      try {
+        const file = sourceFile.type.startsWith("image/") ? await compressReviewImage(sourceFile) : sourceFile;
+        const uploaded = await uploadReviewMedia(token, requestId, file);
+        const item: LocalReviewMedia = { ...uploaded, fileName: sourceFile.name, previewUrl: URL.createObjectURL(file) };
+        setMedia((value) => ({ ...value, [requestId]: [...(value[requestId] ?? []), item] }));
+        current.push(item);
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to upload this file."); }
+      finally { setUploadingRequestIds((ids) => { const index = ids.indexOf(requestId); return index < 0 ? ids : [...ids.slice(0, index), ...ids.slice(index + 1)]; }); }
+    }
+  };
+
+  const removeMedia = async (requestId: string, item: LocalReviewMedia) => {
+    try {
+      await removeReviewMedia(token, item.id);
+      URL.revokeObjectURL(item.previewUrl);
+      setMedia((value) => ({ ...value, [requestId]: (value[requestId] ?? []).filter((mediaItem) => mediaItem.id !== item.id) }));
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to remove this file."); }
+  };
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!invitation) return;
@@ -55,6 +84,7 @@ export function InvitationReviewPage({ token }: Props) {
     if (!authorName.trim()) { setMessage("Please enter your name once before submitting your review."); return; }
     if (!reviews.length) { setMessage("Write a review for at least one product before submitting."); return; }
     setMessage("");
+    if (uploadingRequestIds.length) { setMessage("Please wait for all files to finish uploading."); return; }
     setSubmitting(true);
     try {
       const response = await fetch(`/api/invitations/${token}/reviews`, {
@@ -90,11 +120,12 @@ export function InvitationReviewPage({ token }: Props) {
         const draft = drafts[product.requestId] ?? emptyDraft();
         const submitted = product.status === "submitted";
         return <section className={`tmr-invitation-product${submitted ? " tmr-invitation-product--submitted" : ""}`} key={product.requestId}>
-          <div className="tmr-invitation-product__heading"><Text as="h2" variant="headingMd">{product.productTitle}</Text>{submitted && <Badge tone="success">Submitted</Badge>}</div>
+          <div className="tmr-invitation-product__heading"><div><Text as="p" tone="subdued" variant="bodySm">PRODUCT REVIEW</Text><Text as="h2" variant="headingMd">{product.productTitle}</Text></div>{submitted && <Badge tone="success">Submitted</Badge>}</div>
           {submitted ? <p className="tmr-invitation-product__submitted-note">This verified review was submitted and is awaiting store approval.</p> : <FormLayout>
             <div><Text as="p" fontWeight="medium">Rating</Text><div className="tmr-invitation-rating" role="radiogroup" aria-label={`Rating for ${product.productTitle}`}>{[1, 2, 3, 4, 5].map((rating) => <button aria-checked={draft.rating === rating} aria-label={`${rating} star${rating === 1 ? "" : "s"}`} className={`tmr-invitation-star${draft.rating === rating ? " is-selected" : ""}`} disabled={submitting} key={rating} onClick={() => updateDraft(product.requestId, { rating })} role="radio" type="button">★</button>)}</div></div>
             <TextField label="Title (optional)" value={draft.title} onChange={(value) => updateDraft(product.requestId, { title: value })} autoComplete="off" disabled={submitting} />
             <TextField label="Review" value={draft.body} onChange={(value) => updateDraft(product.requestId, { body: value })} multiline autoComplete="off" disabled={submitting} helpText="Required to submit this product review." />
+            <div className="tmr-invitation-media"><div><Text as="p" fontWeight="medium">Photos and video (optional)</Text><Text as="p" tone="subdued" variant="bodySm">Up to 5 images and 1 MP4 video. Images are compressed before upload; videos can be up to 10 MB.</Text></div><label className="tmr-invitation-media__picker"><input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" multiple disabled={submitting || uploadingRequestIds.includes(product.requestId)} onChange={(event) => { void uploadFiles(product.requestId, event.target.files); event.currentTarget.value = ""; }} /><span>{uploadingRequestIds.includes(product.requestId) ? "Uploading…" : "Add photos or video"}</span></label>{(media[product.requestId] ?? []).length > 0 && <div className="tmr-invitation-media__grid">{(media[product.requestId] ?? []).map((item) => <div className="tmr-invitation-media__item" key={item.id}>{item.kind === "image" ? <img src={item.previewUrl} alt="Review upload preview" /> : <video src={item.previewUrl} controls preload="metadata" />}<button aria-label={`Remove ${item.fileName}`} type="button" onClick={() => void removeMedia(product.requestId, item)} disabled={submitting}>×</button><span>{item.fileName}</span></div>)}</div>}</div>
           </FormLayout>}
         </section>;
       })}

@@ -21,6 +21,8 @@ function storefrontOrder(sort: StorefrontReviewSort) {
 
 export async function publicReviews(client: pg.Client, shopDomain: string, productExternalId: string, page: number, sort: StorefrontReviewSort) {
   const query = `select r.id,r.rating,r.title,r.body,r.author_name,r.verified_purchase,r.published_at,rr.body reply_body,
+    coalesce((select json_agg(json_build_object('id',rm.id,'kind',rm.media_kind) order by rm.created_at asc)
+      from review_media rm where rm.review_id=r.id), '[]'::json) media,
     count(*) over() as total, avg(r.rating) over() as average
     from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id
     where s.domain=$1 and p.shopify_product_id=$2 and r.status='published' order by ${storefrontOrder(sort)} limit 10 offset $3`;

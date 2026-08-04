@@ -6,6 +6,7 @@ export type QueueJob =
 export interface Env {
   ASSETS: Fetcher;
   HYPERDRIVE: Hyperdrive;
+  REVIEW_MEDIA: R2Bucket;
   REVIEW_QUEUE: Queue<QueueJob>;
   APP_URL: string;
   SHOPIFY_API_KEY: string;
