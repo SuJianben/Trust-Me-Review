@@ -3,6 +3,10 @@ export type SettingsSection = "review-requests" | "email-requests" | "request-sc
 export type ShopSettings = {
   request_enabled: boolean;
   request_delay_days: number;
+  max_products_per_order: number;
+  product_selection_strategy: "highest_price" | "all_items";
+  request_spacing_days: number;
+  customer_request_cooldown_days: number;
   show_verified_badge: boolean;
   star_color: string;
   email_subject_en: string;

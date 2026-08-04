@@ -5,6 +5,10 @@ import type { ShopSettings } from "./types";
 export const defaultShopSettings: ShopSettings = {
   request_enabled: true,
   request_delay_days: 14,
+  max_products_per_order: 1,
+  product_selection_strategy: "highest_price",
+  request_spacing_days: 5,
+  customer_request_cooldown_days: 30,
   show_verified_badge: true,
   star_color: "#f59e0b",
   email_subject_en: "How was your purchase?",
@@ -47,6 +51,10 @@ export function useShopSettings({ request, onError }: UseShopSettingsOptions) {
         body: JSON.stringify({
           requestEnabled: settings.request_enabled,
           requestDelayDays: settings.request_delay_days,
+          maxProductsPerOrder: settings.max_products_per_order,
+          productSelectionStrategy: settings.product_selection_strategy,
+          requestSpacingDays: settings.request_spacing_days,
+          customerRequestCooldownDays: settings.customer_request_cooldown_days,
           showVerifiedBadge: settings.show_verified_badge,
           starColor: settings.star_color,
           emailSubjectEn: settings.email_subject_en,

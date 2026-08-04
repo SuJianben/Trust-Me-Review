@@ -7,4 +7,5 @@ export const moderationSchema = z.object({ status: reviewStatusSchema.optional()
   { message: "Select a review status or update its pin state." },
 );
 export const replySchema = z.object({ body: z.string().trim().min(1).max(2000) });
-export const settingsSchema = z.object({ requestEnabled: z.boolean(), requestDelayDays: z.number().int().min(0).max(90), showVerifiedBadge: z.boolean(), starColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), emailSubjectEn: z.string().min(1).max(200), emailSubjectZh: z.string().min(1).max(200) });
+export const settingsSchema = z.object({ requestEnabled: z.boolean(), requestDelayDays: z.number().int().min(0).max(90), maxProductsPerOrder: z.number().int().min(1).max(10).default(1), productSelectionStrategy: z.enum(["highest_price", "all_items"]).default("highest_price"), requestSpacingDays: z.number().int().min(0).max(90).default(5), customerRequestCooldownDays: z.number().int().min(0).max(365).default(30), showVerifiedBadge: z.boolean(), starColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), emailSubjectEn: z.string().min(1).max(200), emailSubjectZh: z.string().min(1).max(200) });
+export const blocklistEntrySchema = z.object({ email: z.string().trim().email().max(320), note: z.string().trim().max(300).optional() });

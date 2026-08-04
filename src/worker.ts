@@ -7,12 +7,13 @@ import { withDb, audit } from "./services/db";
 import { validWebhook, verifyTurnstile } from "./services/shopify";
 import { verifyAdminSession, createOAuthState, validOAuthState } from "./lib/auth";
 import { ensureManagedShop } from "./features/shops/service";
-import { publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
+import { blocklistEntrySchema, publicReviewSchema, invitationReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { refreshMissingProductSnapshots } from "./features/products/service";
-import { getAdminProductDetail, listAdminProducts, productRequestsEnabled, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
+import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
-import { createRequest, createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
+import { createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
+import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettings } from "./features/requests/scheduling-service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
 
@@ -220,8 +221,71 @@ app.post("/api/admin/reviews/:id/reply", async (ctx) => {
   const admin = ctx.get("admin")!; const input = replySchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
   const reply = await withDb(ctx.env, async (db) => { const review = await db.query<{ shop_id:string }>("select r.shop_id from reviews r join shops s on s.id=r.shop_id where r.id=$1 and s.domain=$2", [ctx.req.param("id"),admin.shopDomain]); if (!review.rowCount) return null; await db.query("insert into review_replies(review_id,shop_id,body,editor_user_id) values($1,$2,$3,$4) on conflict(review_id) do update set body=excluded.body,editor_user_id=excluded.editor_user_id,updated_at=now()", [ctx.req.param("id"),review.rows[0].shop_id,input.data.body,admin.userId]); await audit(db,review.rows[0].shop_id,"review_replied","review",ctx.req.param("id"),admin.userId); return { ok:true }; }); return reply ? ctx.json(reply) : ctx.json({ error:"Review not found" },404);
 });
-app.get("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const row = await withDb(ctx.env, (db) => db.query("select ss.* from shop_settings ss join shops s on s.id=ss.shop_id where s.domain=$1", [admin.shopDomain])); return ctx.json(row.rows[0] ?? {}); });
-app.patch("/api/admin/settings", async (ctx) => { const admin = ctx.get("admin")!; const input = settingsSchema.safeParse(await ctx.req.json()); if (!input.success) return ctx.json({ error: input.error.flatten() },400); await withDb(ctx.env, async (db) => { await db.query(`update shop_settings ss set request_enabled=$1,request_delay_days=$2,show_verified_badge=$3,star_color=$4,email_subject_en=$5,email_subject_zh=$6,updated_at=now() from shops s where ss.shop_id=s.id and s.domain=$7`,[input.data.requestEnabled,input.data.requestDelayDays,input.data.showVerifiedBadge,input.data.starColor,input.data.emailSubjectEn,input.data.emailSubjectZh,admin.shopDomain]); }); return ctx.json({ ok:true }); });
+app.get("/api/admin/settings", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const row = await withDb(ctx.env, (db) => db.query("select ss.* from shop_settings ss join shops s on s.id=ss.shop_id where s.domain=$1", [admin.shopDomain]));
+  return ctx.json(row.rows[0] ?? {});
+});
+app.patch("/api/admin/settings", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const input = settingsSchema.safeParse(await ctx.req.json());
+  if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
+  await withDb(ctx.env, async (db) => {
+    const updated = await db.query<{ shop_id: string }>(`
+      update shop_settings ss set
+        request_enabled=$1,request_delay_days=$2,max_products_per_order=$3,product_selection_strategy=$4,
+        request_spacing_days=$5,customer_request_cooldown_days=$6,show_verified_badge=$7,
+        star_color=$8,email_subject_en=$9,email_subject_zh=$10,updated_at=now()
+      from shops s where ss.shop_id=s.id and s.domain=$11 returning ss.shop_id`,
+      [input.data.requestEnabled,input.data.requestDelayDays,input.data.maxProductsPerOrder,input.data.productSelectionStrategy,input.data.requestSpacingDays,input.data.customerRequestCooldownDays,input.data.showVerifiedBadge,input.data.starColor,input.data.emailSubjectEn,input.data.emailSubjectZh,admin.shopDomain],
+    );
+    if (updated.rowCount) {
+      await audit(db, updated.rows[0].shop_id, "request_scheduling_updated", "shop_settings", updated.rows[0].shop_id, admin.userId, {
+        delayDays: input.data.requestDelayDays, maxProductsPerOrder: input.data.maxProductsPerOrder,
+        selectionStrategy: input.data.productSelectionStrategy, spacingDays: input.data.requestSpacingDays,
+        customerCooldownDays: input.data.customerRequestCooldownDays,
+      });
+      await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'request_scheduling_updated',$2)", [updated.rows[0].shop_id, JSON.stringify({ maxProductsPerOrder: input.data.maxProductsPerOrder, customerCooldownDays: input.data.customerRequestCooldownDays })]);
+    }
+  });
+  return ctx.json({ ok: true });
+});
+app.get("/api/admin/request-blocklist", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const entries = await withDb(ctx.env, (db) => db.query(`select b.id,b.email_masked,b.note,b.created_at from review_request_blocklist b join shops s on s.id=b.shop_id where s.domain=$1 order by b.created_at desc`, [admin.shopDomain]));
+  return ctx.json(entries.rows);
+});
+app.post("/api/admin/request-blocklist", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const input = blocklistEntrySchema.safeParse(await ctx.req.json());
+  if (!input.success) return ctx.json({ error: input.error.flatten() }, 400);
+  const entry = await withDb(ctx.env, async (db) => {
+    const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [admin.shopDomain]);
+    if (!shop.rowCount) return null;
+    const emailHash = await sha256(input.data.email.toLowerCase());
+    const saved = await db.query<{ id: string }>(`
+      insert into review_request_blocklist(shop_id,email_hash,email_masked,note,created_by_user_id)
+      values($1,$2,$3,$4,$5)
+      on conflict(shop_id,email_hash) do update set email_masked=excluded.email_masked,note=excluded.note,created_by_user_id=excluded.created_by_user_id,updated_at=now()
+      returning id`, [shop.rows[0].id, emailHash, maskEmail(input.data.email), input.data.note || null, admin.userId]);
+    await audit(db, shop.rows[0].id, "review_request_blocked", "request_blocklist", saved.rows[0].id, admin.userId);
+    await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'review_request_blocklist_added','{}')", [shop.rows[0].id]);
+    return saved.rows[0];
+  });
+  return entry ? ctx.json({ ok: true, id: entry.id }, 201) : ctx.json({ error: "Shop not found" }, 404);
+});
+app.delete("/api/admin/request-blocklist/:id", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const deleted = await withDb(ctx.env, async (db) => {
+    const result = await db.query<{ id: string; shop_id: string }>(`delete from review_request_blocklist b using shops s where b.shop_id=s.id and s.domain=$1 and b.id=$2 returning b.id,b.shop_id`, [admin.shopDomain, ctx.req.param("id")]);
+    if (result.rowCount) {
+      await audit(db, result.rows[0].shop_id, "review_request_unblocked", "request_blocklist", result.rows[0].id, admin.userId);
+      await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'review_request_blocklist_removed','{}')", [result.rows[0].shop_id]);
+    }
+    return result.rows[0] ?? null;
+  });
+  return deleted ? ctx.json({ ok: true }) : ctx.json({ error: "Blocklist entry not found" }, 404);
+});
 app.get("/api/admin/test-deliveries", async (ctx) => { const admin=ctx.get("admin")!; const rows=await withDb(ctx.env,(db)=>db.query("select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.attempt_count,rr.failure_reason,rr.test_email_payload,p.shopify_product_id from review_requests rr join shops s on s.id=rr.shop_id join products p on p.id=rr.product_id where s.domain=$1 order by rr.created_at desc limit 100",[admin.shopDomain])); return ctx.json(rows.rows); });
 app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
   const admin = ctx.get("admin")!;
@@ -281,15 +345,19 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
   }
 
   if (job.topic === "orders/fulfilled") {
-    const payload = job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number; title?: string }> };
+    const payload = job.payload as { id?: number; email?: string; line_items?: Array<{ product_id?: number; variant_id?: number; title?: string; price?: string | number }> };
     await withDb(env, async (db) => {
-      const shop = await db.query<{ id: string; request_delay_days: number; request_enabled: boolean }>("select s.id,ss.request_delay_days,ss.request_enabled from shops s join shop_settings ss on ss.shop_id=s.id where s.domain=$1 and s.status='active'", [job.shopDomain]);
-      if (payload.id && payload.email && shop.rowCount && shop.rows[0].request_enabled) {
-        const due = new Date(Date.now() + shop.rows[0].request_delay_days * 86400000);
-        for (const item of payload.line_items ?? []) if (item.product_id) {
-          const productId = await ensureProduct(db, shop.rows[0].id, String(item.product_id), item.title);
-          if (await productRequestsEnabled(db, productId)) await createRequest(db, { shopId: shop.rows[0].id, productId, orderId: String(payload.id), variantId: item.variant_id ? String(item.variant_id) : undefined, email: payload.email, scheduledAt: due, tokenSecret: env.TOKEN_SECRET });
-        }
+      const shop = await db.query<RequestSchedulingSettings>(`
+        select s.id,ss.request_enabled,ss.request_delay_days,ss.max_products_per_order,
+          ss.product_selection_strategy,ss.request_spacing_days,ss.customer_request_cooldown_days
+        from shops s join shop_settings ss on ss.shop_id=s.id
+        where s.domain=$1 and s.status='active'`, [job.shopDomain]);
+      if (payload.id && payload.email && shop.rowCount) {
+        const outcome = await scheduleFulfilledOrderRequests(db, {
+          shop: shop.rows[0], orderId: String(payload.id), email: payload.email,
+          lineItems: payload.line_items ?? [], tokenSecret: env.TOKEN_SECRET,
+        });
+        await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'fulfilled_order_review_request_evaluated',$2)", [shop.rows[0].id, JSON.stringify({ created: outcome.created, skippedReason: outcome.skippedReason })]);
       }
       await markWebhookProcessed(db, job.deliveryId);
     });

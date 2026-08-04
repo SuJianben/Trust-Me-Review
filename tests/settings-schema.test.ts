@@ -4,6 +4,10 @@ import { settingsSchema } from "../src/features/reviews/schemas";
 const validSettings = {
   requestEnabled: true,
   requestDelayDays: 14,
+  maxProductsPerOrder: 1,
+  productSelectionStrategy: "highest_price",
+  requestSpacingDays: 5,
+  customerRequestCooldownDays: 30,
   showVerifiedBadge: true,
   starColor: "#F59E0B",
   emailSubjectEn: "How was your purchase?",
@@ -17,5 +21,9 @@ describe("settings schema", () => {
 
   it("rejects a fulfillment delay beyond the supported range", () => {
     expect(settingsSchema.safeParse({ ...validSettings, requestDelayDays: 91 }).success).toBe(false);
+  });
+
+  it("rejects a customer request limit beyond the supported range", () => {
+    expect(settingsSchema.safeParse({ ...validSettings, customerRequestCooldownDays: 366 }).success).toBe(false);
   });
 });
