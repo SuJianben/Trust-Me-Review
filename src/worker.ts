@@ -13,6 +13,7 @@ import { refreshMissingProductSnapshots } from "./features/products/service";
 import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
 import { createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
+import { groupTestDeliveryRows } from "./features/requests/delivery-view-service";
 import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettings } from "./features/requests/scheduling-service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
@@ -110,8 +111,8 @@ app.get("/api/admin/dashboard", async (ctx) => {
         (select count(*)::int from reviews r where r.shop_id = s.id and r.status = 'published') as published_reviews,
         (select count(*)::int from reviews r where r.shop_id = s.id and r.status = 'pending') as pending_reviews,
         (select coalesce(avg(r.rating), 0)::float8 from reviews r where r.shop_id = s.id and r.status = 'published') as average_rating,
-        (select count(*)::int from review_requests rr where rr.shop_id = s.id and rr.status in ('sent', 'submitted')) as sent_requests,
-        (select count(*)::int from review_requests rr where rr.shop_id = s.id and rr.status = 'scheduled') as scheduled_requests
+        (select count(distinct rr.shopify_order_id)::int from review_requests rr where rr.shop_id = s.id and rr.status in ('sent', 'submitted')) as sent_requests,
+        (select count(distinct rr.shopify_order_id)::int from review_requests rr where rr.shop_id = s.id and rr.status = 'scheduled') as scheduled_requests
       from shops s where s.domain = $1
     `, [admin.shopDomain]);
     const topProducts = await db.query(`
@@ -286,7 +287,19 @@ app.delete("/api/admin/request-blocklist/:id", async (ctx) => {
   });
   return deleted ? ctx.json({ ok: true }) : ctx.json({ error: "Blocklist entry not found" }, 404);
 });
-app.get("/api/admin/test-deliveries", async (ctx) => { const admin=ctx.get("admin")!; const rows=await withDb(ctx.env,(db)=>db.query("select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.attempt_count,rr.failure_reason,rr.test_email_payload,p.shopify_product_id from review_requests rr join shops s on s.id=rr.shop_id join products p on p.id=rr.product_id where s.domain=$1 order by rr.created_at desc limit 100",[admin.shopDomain])); return ctx.json(rows.rows); });
+app.get("/api/admin/test-deliveries", async (ctx) => {
+  const admin = ctx.get("admin")!;
+  const rows = await withDb(ctx.env, (db) => db.query(`
+    select rr.id,rr.shopify_order_id,rr.status,rr.scheduled_at,rr.sent_at,rr.attempt_count,
+      rr.failure_reason,rr.test_email_payload,p.shopify_product_id,p.title_snapshot
+    from review_requests rr
+    join shops s on s.id=rr.shop_id
+    join products p on p.id=rr.product_id
+    where s.domain=$1
+    order by rr.created_at desc
+    limit 500`, [admin.shopDomain]));
+  return ctx.json(groupTestDeliveryRows(rows.rows));
+});
 app.post("/api/admin/test-deliveries/process-due", async (ctx) => {
   const admin = ctx.get("admin")!;
   const requestIds = await withDb(ctx.env, async (db) => {
@@ -363,4 +376,4 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     });
   }
 }
-export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };
+export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); })); } };

@@ -5,10 +5,10 @@ import type { ShopSettings } from "./types";
 export const defaultShopSettings: ShopSettings = {
   request_enabled: true,
   request_delay_days: 14,
-  max_products_per_order: 1,
+  max_products_per_order: 10,
   product_selection_strategy: "highest_price",
-  request_spacing_days: 5,
-  customer_request_cooldown_days: 30,
+  request_spacing_days: 0,
+  customer_request_cooldown_days: 0,
   show_verified_badge: true,
   star_color: "#f59e0b",
   email_subject_en: "How was your purchase?",

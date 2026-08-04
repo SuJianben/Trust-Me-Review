@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scheduledAtForIndex, selectOrderItems } from "../src/features/requests/scheduling-service";
+import { scheduledAtForOrder, selectOrderItems } from "../src/features/requests/scheduling-service";
 
 describe("review request scheduling rules", () => {
   const items = [
@@ -16,8 +16,12 @@ describe("review request scheduling rules", () => {
     expect(selectOrderItems(items, "all_items", 2).map((item) => item.product_id)).toEqual([1, 2]);
   });
 
-  it("adds the configured invitation spacing for each selected product", () => {
+  it("uses one scheduled time for every product in an order", () => {
     const base = new Date("2026-08-04T00:00:00.000Z");
-    expect(scheduledAtForIndex(base, 2, 5).toISOString()).toBe("2026-08-14T00:00:00.000Z");
+    expect(scheduledAtForOrder(base, 5).toISOString()).toBe("2026-08-09T00:00:00.000Z");
+  });
+
+  it("can include all three products from a normal order", () => {
+    expect(selectOrderItems(items, "highest_price", 10).map((item) => item.product_id)).toEqual([2, 3, 1]);
   });
 });

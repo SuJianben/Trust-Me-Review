@@ -53,8 +53,9 @@ export function selectOrderItems(items: FulfilledLineItem[], strategy: RequestSc
   return products.slice(0, Math.max(1, maxProducts));
 }
 
-export function scheduledAtForIndex(baseDate: Date, index: number, spacingDays: number) {
-  return new Date(baseDate.getTime() + index * Math.max(0, spacingDays) * 86_400_000);
+/** All products from one fulfilled order become due at the same time. */
+export function scheduledAtForOrder(baseDate: Date, delayDays: number) {
+  return new Date(baseDate.getTime() + Math.max(0, delayDays) * 86_400_000);
 }
 
 export function maskEmail(email: string) {
@@ -86,7 +87,9 @@ export async function scheduleFulfilledOrderRequests(client: pg.Client, args: Sc
   const candidates = selectOrderItems(args.lineItems, args.shop.product_selection_strategy, args.shop.max_products_per_order);
   if (!candidates.length) return { created: 0, skippedReason: "no_products" };
 
-  const baseDate = new Date((args.now ?? new Date()).getTime() + args.shop.request_delay_days * 86_400_000);
+  // Delivery is order-based: every eligible product from the same order shares
+  // one scheduled time and is included in the same invitation envelope.
+  const scheduledAt = scheduledAtForOrder(args.now ?? new Date(), args.shop.request_delay_days);
   let created = 0;
   for (const item of candidates) {
     if (!item.product_id) continue;
@@ -98,7 +101,7 @@ export async function scheduleFulfilledOrderRequests(client: pg.Client, args: Sc
       orderId: args.orderId,
       variantId: item.variant_id ? String(item.variant_id) : undefined,
       email: args.email,
-      scheduledAt: scheduledAtForIndex(baseDate, created, args.shop.request_spacing_days),
+      scheduledAt,
       tokenSecret: args.tokenSecret,
     });
     if (request) created += 1;

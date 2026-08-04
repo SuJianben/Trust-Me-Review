@@ -24,7 +24,7 @@ export function EmailReviewRequestsPanel({ request, onError, onBack }: Props) {
     <Card>
       <div className="tmr-settings-form-heading">
         <Text as="h2" variant="headingMd">Automatic requests</Text>
-        <Text as="p" tone="subdued">When enabled, fulfilled orders can create one review request for each eligible product.</Text>
+        <Text as="p" tone="subdued">When enabled, each fulfilled order can create one invitation containing a review link for every eligible product.</Text>
       </div>
       {saved && <Banner tone="success">Email review request settings saved.</Banner>}
       <div className="tmr-settings-form-control">

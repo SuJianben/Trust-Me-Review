@@ -5,13 +5,13 @@ import type { AuthenticatedRequest } from "../../api";
 type TestDelivery = {
   id: string;
   shopify_order_id: string;
-  shopify_product_id: string;
   status: string;
   scheduled_at: string;
   sent_at: string | null;
   attempt_count: number;
   failure_reason: string | null;
-  test_email_payload: { reviewUrl?: string; note?: string } | null;
+  test_email_payload: { reviewUrl?: string; reviewUrls?: Array<{ productId?: string; productTitle?: string; reviewUrl?: string }>; note?: string } | null;
+  products: Array<{ shopify_product_id: string; title_snapshot: string; reviewUrl?: string }>;
 };
 
 type Props = {
@@ -46,7 +46,7 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
     setNotice("");
     try {
       const result = await request<{ queued: number }>("/api/admin/test-deliveries/process-due", { method: "POST" });
-      setNotice(result.queued ? `Queued ${result.queued} due test delivery. Refresh in a moment to get the review link.` : "There are no due test deliveries to run.");
+      setNotice(result.queued ? `Queued ${result.queued} due order invitation. Refresh in a moment to get the review links.` : "There are no due order invitations to run.");
     } catch (issue) {
       onError((issue as Error).message);
     } finally {
@@ -56,7 +56,7 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
   const retry = async (id: string) => {
     try {
       await request(`/api/admin/test-deliveries/${id}/retry`, { method: "POST" });
-      setNotice("The failed test delivery was queued again. Refresh in a moment to check its status.");
+      setNotice("The failed order invitation was queued again. Refresh in a moment to check its status.");
       await load();
     } catch (issue) {
       onError((issue as Error).message);
@@ -64,22 +64,21 @@ export function TestDeliveriesPanel({ request, onError }: Props) {
   };
   const rows = deliveries.map((delivery) => [
     delivery.shopify_order_id,
-    delivery.shopify_product_id,
+    <div style={{ display: "grid", gap: 4 }}>{delivery.products.map((product) => <div key={product.shopify_product_id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span>{product.title_snapshot || product.shopify_product_id}</span>{product.reviewUrl ? <Button size="slim" url={product.reviewUrl} target="_blank">Open review link</Button> : null}</div>)}</div>,
     delivery.status,
     formattedDate(delivery.scheduled_at),
     formattedDate(delivery.sent_at),
     delivery.failure_reason ? `${delivery.failure_reason} (attempts: ${delivery.attempt_count})` : "—",
-    delivery.test_email_payload?.reviewUrl ? <Button size="slim" url={delivery.test_email_payload.reviewUrl} target="_blank">Open review link</Button> : "—",
     delivery.status === "failed" ? <Button size="slim" onClick={() => void retry(delivery.id)}>Retry</Button> : "—",
   ]);
 
   return <Card>
     <div className="tmr-section-heading">
-      <div className="tmr-panel-note"><Text as="h2" variant="headingLg">Test delivery records</Text><Text as="p" tone="subdued">V1 records a test invitation and secure review link. It does not send a real customer email.</Text></div>
+      <div className="tmr-panel-note"><Text as="h2" variant="headingLg">Test delivery records</Text><Text as="p" tone="subdued">V1 records one test invitation per fulfilled order. One record can contain multiple product review links; it does not send a real customer email.</Text></div>
       <div style={{ display: "flex", gap: 8 }}><Button onClick={() => void processDueDeliveries()} loading={processing}>Run due deliveries</Button><Button onClick={() => void load()} loading={loading}>Refresh</Button></div>
     </div>
     {notice && <Text as="p">{notice}</Text>}
-    <DataTable columnContentTypes={["text", "text", "text", "text", "text", "text", "text", "text"]} headings={["Order", "Product", "Status", "Scheduled", "Sent", "Last issue", "Review link", "Actions"]} rows={rows} />
-    {!loading && !rows.length && <Text as="p">No test deliveries yet. Fulfill a development-store order after setting the delay to 0 days.</Text>}
+    <DataTable columnContentTypes={["text", "text", "text", "text", "text", "text", "text"]} headings={["Order", "Products & review links", "Status", "Scheduled", "Sent", "Last issue", "Actions"]} rows={rows} />
+    {!loading && !rows.length && <Text as="p">No order invitations yet. Fulfill a development-store order after setting the delay to 0 days.</Text>}
   </Card>;
 }
