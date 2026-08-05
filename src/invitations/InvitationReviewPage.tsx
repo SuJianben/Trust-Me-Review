@@ -79,7 +79,11 @@ export function InvitationReviewPage({ token }: Props) {
     event.preventDefault();
     if (!invitation) return;
     const reviews = pendingProducts
-      .map((product) => ({ requestId: product.requestId, ...(drafts[product.requestId] ?? emptyDraft()) }))
+      .map((product) => ({
+        requestId: product.requestId,
+        ...(drafts[product.requestId] ?? emptyDraft()),
+        mediaIds: (media[product.requestId] ?? []).map((item) => item.id),
+      }))
       .filter((review) => review.body.trim().length > 0);
     if (!authorName.trim()) { setMessage("Please enter your name once before submitting your review."); return; }
     if (!reviews.length) { setMessage("Write a review for at least one product before submitting."); return; }

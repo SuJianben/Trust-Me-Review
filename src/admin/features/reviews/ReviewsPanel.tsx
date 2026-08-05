@@ -9,7 +9,7 @@ type Review = {
   id: string; rating: number; author_name: string; title: string | null; body: string; status: ReviewStatus;
   source: "public" | "invitation"; pinned: boolean; verified_purchase: boolean; reply_body?: string; created_at: string;
   shopify_product_id: string; title_snapshot: string;
-  media: Array<{ id: string; kind: "image" | "video" }>;
+  media: Array<{ id: string; kind: "image" | "video"; storageUrl?: string | null; fileStatus?: string | null }>;
 };
 type ReviewResponse = { reviews: Review[]; total: number; page: number };
 type Props = {

@@ -5,6 +5,7 @@ const invitationReviewItemSchema = z.object({
   rating: z.number().int().min(1).max(5),
   title: z.string().trim().max(120).optional().transform((value) => value || undefined),
   body: z.string().trim().min(1).max(3000),
+  mediaIds: z.array(z.string().uuid()).max(6).default([]),
 });
 
 /**
@@ -22,6 +23,14 @@ export const invitationBatchReviewSchema = z.object({
     }
     requestIds.add(review.requestId);
   });
+
+  const mediaIds = new Set<string>();
+  value.reviews.forEach((review, reviewIndex) => review.mediaIds.forEach((mediaId, mediaIndex) => {
+    if (mediaIds.has(mediaId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["reviews", reviewIndex, "mediaIds", mediaIndex], message: "An upload can only be attached to one product review." });
+    }
+    mediaIds.add(mediaId);
+  }));
 });
 export const reviewStatusSchema = z.enum(["pending", "published", "hidden", "deleted"]);
 export const moderationSchema = z.object({ status: reviewStatusSchema.optional(), pinned: z.boolean().optional() }).refine(

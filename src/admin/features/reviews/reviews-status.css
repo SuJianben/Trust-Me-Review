@@ -57,6 +57,18 @@
   background: #f1f3f5;
 }
 
+.tmr-admin-review-media__processing {
+  align-items: center;
+  border: 1px dashed #b9c6d6;
+  border-radius: 6px;
+  color: #637381;
+  display: inline-flex;
+  font-size: 12px;
+  justify-content: center;
+  min-height: 56px;
+  padding: 8px;
+}
+
 .tmr-admin-review-media__image:hover {
   border-color: #005bd3;
 }

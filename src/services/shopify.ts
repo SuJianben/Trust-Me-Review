@@ -16,6 +16,6 @@ export async function verifyTurnstile(token: string, remoteIp: string | null, en
 }
 export async function buildOAuthRedirect(shop: string, env: Env) {
   const state = await hmacHex(env.TOKEN_SECRET, `${shop}:${Date.now()}`);
-  const params = new URLSearchParams({ client_id: env.SHOPIFY_API_KEY, scope: "read_products,read_orders,write_files", redirect_uri: `${env.APP_URL}/auth/callback`, state });
+  const params = new URLSearchParams({ client_id: env.SHOPIFY_API_KEY, scope: "read_products,read_orders,read_files,write_files", redirect_uri: `${env.APP_URL}/auth/callback`, state });
   return { state, url: `https://${shop}/admin/oauth/authorize?${params}` };
 }

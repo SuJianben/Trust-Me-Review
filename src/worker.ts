@@ -43,7 +43,7 @@ app.get("/", async (ctx) => {
 
 app.get("/auth", async (ctx) => {
   const shop = ctx.req.query("shop")?.toLowerCase(); if (!shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return ctx.text("Invalid shop", 400);
-  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders,write_files", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
+  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders,read_files,write_files", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
   return ctx.redirect(`https://${shop}/admin/oauth/authorize?${params}`);
 });
 app.get("/auth/callback", async (ctx) => {
@@ -197,7 +197,13 @@ app.post("/api/invitations/:token/reviews", async (ctx) => {
         const target = requestsById.get(reviewInput.requestId)!;
         const review = await db.query<{ id: string }>("insert into reviews(shop_id,product_id,shopify_order_id,shopify_variant_id,rating,title,body,author_name,author_email_hash,status,source,verified_purchase) values($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','invitation',true) returning id", [value.shop_id,target.product_id,value.shopify_order_id,target.shopify_variant_id,reviewInput.rating,reviewInput.title ?? null,reviewInput.body,input.data.authorName,target.customer_email_hash]);
         reviewIds.push(review.rows[0].id);
-        await db.query("update review_media set review_id=$1 where shop_id=$2 and review_request_id=$3 and review_id is null", [review.rows[0].id, value.shop_id, target.id]);
+        if (reviewInput.mediaIds.length) {
+          const attached = await db.query(`
+            update review_media set review_id=$1
+            where shop_id=$2 and review_request_id=$3 and id = any($4::uuid[]) and review_id is null
+            returning id`, [review.rows[0].id, value.shop_id, target.id, reviewInput.mediaIds]);
+          if (attached.rowCount !== reviewInput.mediaIds.length) throw new Error("MEDIA_ATTACHMENT_UNAVAILABLE");
+        }
         await db.query("update review_requests set status='submitted',submitted_at=now(),updated_at=now() where id=$1", [target.id]);
       }
       await db.query("insert into analytics_events(shop_id,event_name,properties) values($1,'invitation_review_batch_submitted',$2)", [value.shop_id, JSON.stringify({ orderId: value.shopify_order_id, productCount: reviewIds.length, verifiedPurchase: true })]);
@@ -276,11 +282,30 @@ app.get("/api/admin/reviews", async (ctx) => {
     if (productId) { values.push(productId); conditions.push(`p.shopify_product_id=$${values.length}`); }
     values.push((page - 1) * 30);
     return db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,
-      coalesce((select json_agg(json_build_object('id',rm.id,'kind',rm.media_kind) order by rm.created_at asc)
+      coalesce((select json_agg(json_build_object('id',rm.id,'kind',rm.media_kind,'storageUrl',rm.storage_url,'fileStatus',rm.file_status,'shopifyFileId',rm.shopify_file_id) order by rm.created_at asc)
         from review_media rm where rm.review_id=r.id), '[]'::json) media,
       count(*) over() total
       from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where ${conditions.join(" and ")} order by r.created_at desc limit 30 offset $${values.length}`, values);
   });
+  const unresolvedMedia = result.rows.flatMap((review) => (review.media as Array<{ id: string; storageUrl: string | null; shopifyFileId: string | null; fileStatus: string }> ?? [])
+    .filter((media) => !media.storageUrl && media.shopifyFileId));
+  if (unresolvedMedia.length) {
+    const shop = await withDb(ctx.env, (db) => db.query<{ access_token: string | null }>("select access_token from shops where domain=$1", [admin.shopDomain]));
+    const accessToken = shop.rows[0]?.access_token;
+    if (accessToken) {
+      for (const media of unresolvedMedia) {
+        try {
+          const resolved = await resolveShopifyMediaUrl(ctx.env, admin.shopDomain, accessToken, media.shopifyFileId!);
+          if (!resolved) continue;
+          media.storageUrl = resolved.storageUrl;
+          media.fileStatus = resolved.fileStatus;
+          await withDb(ctx.env, (db) => db.query("update review_media set storage_url=$1,file_status=$2 where id=$3", [resolved.storageUrl, resolved.fileStatus, media.id]));
+        } catch (error) {
+          console.warn("admin_review_media_refresh_failed", { mediaId: media.id, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    }
+  }
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
 });
 app.get("/api/admin/products", async (ctx) => {
