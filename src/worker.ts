@@ -275,7 +275,11 @@ app.get("/api/admin/reviews", async (ctx) => {
     if (search) { values.push(search); conditions.push(`(r.author_name ilike '%' || $${values.length} || '%' or coalesce(r.title,'') ilike '%' || $${values.length} || '%' or r.body ilike '%' || $${values.length} || '%')`); }
     if (productId) { values.push(productId); conditions.push(`p.shopify_product_id=$${values.length}`); }
     values.push((page - 1) * 30);
-    return db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,count(*) over() total from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where ${conditions.join(" and ")} order by r.created_at desc limit 30 offset $${values.length}`, values);
+    return db.query(`select r.*,p.shopify_product_id,p.title_snapshot,rr.body reply_body,
+      coalesce((select json_agg(json_build_object('id',rm.id,'kind',rm.media_kind) order by rm.created_at asc)
+        from review_media rm where rm.review_id=r.id), '[]'::json) media,
+      count(*) over() total
+      from reviews r join shops s on s.id=r.shop_id join products p on p.id=r.product_id left join review_replies rr on rr.review_id=r.id where ${conditions.join(" and ")} order by r.created_at desc limit 30 offset $${values.length}`, values);
   });
   return ctx.json({ reviews: result.rows, total: Number(result.rows[0]?.total ?? 0), page });
 });
