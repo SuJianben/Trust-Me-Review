@@ -1,5 +1,5 @@
--- Review media lives in private R2 object storage. PostgreSQL stores only the
--- ownership, lifecycle and display metadata needed to secure each object.
+-- PostgreSQL stores only the ownership, lifecycle and display metadata for
+-- review media. The actual file bytes are stored by the configured provider.
 create table if not exists review_media (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references shops(id) on delete cascade,
