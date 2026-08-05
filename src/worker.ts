@@ -15,6 +15,7 @@ import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, 
 import { productRequestSettingSchema } from "./features/products/schemas";
 import { createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryFailedTestDelivery } from "./features/requests/service";
 import { groupTestDeliveryRows } from "./features/requests/delivery-view-service";
+import { toInvitationProducts } from "./features/requests/invitation-view-service";
 import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettings } from "./features/requests/scheduling-service";
 import { randomToken, sha256 } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
@@ -99,7 +100,7 @@ app.get("/api/invitations/:token", async (ctx) => {
       from review_requests rr join products p on p.id=rr.product_id
       where rr.shop_id=$1 and rr.shopify_order_id=$2 and rr.status in ('sent','submitted')
       order by rr.created_at asc`, [value.shop_id, value.shopify_order_id]);
-    return { orderId: value.shopify_order_id, products: products.rows };
+    return { orderId: value.shopify_order_id, products: toInvitationProducts(products.rows) };
   });
   if (!invitation) return ctx.json({ error: "Invitation is invalid or already used" }, 404);
   return ctx.json(invitation);
