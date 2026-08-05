@@ -9,7 +9,7 @@ import { ensureManagedShop } from "./features/shops/service";
 import { blocklistEntrySchema, publicReviewSchema, invitationBatchReviewSchema, moderationSchema, replySchema, settingsSchema } from "./features/reviews/schemas";
 import { ensureProduct, hasProhibitedText, publicReviews, publicReviewSummary, reservePublicSubmission, type StorefrontReviewSort } from "./features/reviews/service";
 import { validateReviewMedia } from "./features/reviews/media-rules";
-import { deleteReviewMediaObjects, removeExpiredReviewMedia } from "./features/reviews/media-service";
+import { deleteShopifyReviewMedia, removeExpiredReviewMedia, resolveShopifyMediaUrl, uploadReviewMediaToShopifyFiles } from "./features/reviews/shopify-media-service";
 import { refreshMissingProductSnapshots } from "./features/products/service";
 import { getAdminProductDetail, listAdminProducts, updateProductRequestEnabled, type ProductRequestFilter } from "./features/products/admin-service";
 import { productRequestSettingSchema } from "./features/products/schemas";
@@ -42,7 +42,7 @@ app.get("/", async (ctx) => {
 
 app.get("/auth", async (ctx) => {
   const shop = ctx.req.query("shop")?.toLowerCase(); if (!shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return ctx.text("Invalid shop", 400);
-  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
+  const state = await createOAuthState(shop, ctx.env); const params = new URLSearchParams({ client_id: ctx.env.SHOPIFY_API_KEY, scope: "read_products,read_orders,write_files", redirect_uri: `${ctx.env.APP_URL}/auth/callback`, state });
   return ctx.redirect(`https://${shop}/admin/oauth/authorize?${params}`);
 });
 app.get("/auth/callback", async (ctx) => {
@@ -114,25 +114,25 @@ app.post("/api/invitations/:token/media", async (ctx) => {
   if (!validation.ok) return ctx.json({ error: validation.error }, 400);
   const tokenHash = await sha256(ctx.req.param("token"));
   const upload = await withDb(ctx.env, async (db) => {
-    const request = await db.query<{ shop_id: string }>(`
-      select target.shop_id
+    const request = await db.query<{ shop_id: string; domain: string; access_token: string | null }>(`
+      select target.shop_id,s.domain,s.access_token
       from review_requests source
       join review_requests target on target.shop_id=source.shop_id and target.shopify_order_id=source.shopify_order_id
+      join shops s on s.id=target.shop_id
       where source.token_hash=$1 and source.status in ('sent','submitted') and target.id=$2 and target.status='sent'`, [tokenHash, requestId]);
     return request.rows[0] ?? null;
   });
   if (!upload) return ctx.json({ error: "This product invitation is no longer available." }, 409);
-  const extension = validation.kind === "video" ? "mp4" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-  const objectKey = `reviews/${upload.shop_id}/${requestId}/${crypto.randomUUID()}.${extension}`;
-  await ctx.env.REVIEW_MEDIA.put(objectKey, file, { httpMetadata: { contentType: file.type } });
+  if (!upload.access_token) return ctx.json({ error: "Shopify Files access is unavailable. Reinstall the app to grant file permission." }, 409);
+  const stored = await uploadReviewMediaToShopifyFiles(ctx.env, { shopDomain: upload.domain, accessToken: upload.access_token, requestId, file, kind: validation.kind });
   try {
     const media = await withDb(ctx.env, async (db) => db.query<{ id: string }>(`
-      insert into review_media(shop_id,review_request_id,object_key,media_kind,content_type,byte_size)
-      values($1,$2,$3,$4,$5,$6) returning id`, [upload.shop_id, requestId, objectKey, validation.kind, file.type, file.size]));
+      insert into review_media(shop_id,review_request_id,object_key,storage_provider,shopify_file_id,storage_url,file_status,media_kind,content_type,byte_size)
+      values($1,$2,$3,'shopify_files',$4,$5,$6,$7,$8,$9) returning id`, [upload.shop_id, requestId, `shopify-file:${stored.shopifyFileId}`, stored.shopifyFileId, stored.storageUrl, stored.fileStatus, validation.kind, file.type, file.size]));
     console.info("invitation_review_media_uploaded", { requestId, kind: validation.kind, byteSize: file.size });
     return ctx.json({ id: media.rows[0].id, kind: validation.kind }, 201);
   } catch (error) {
-    await ctx.env.REVIEW_MEDIA.delete(objectKey);
+    await deleteShopifyReviewMedia(ctx.env, upload.domain, upload.access_token, [stored.shopifyFileId]);
     throw error;
   }
 });
@@ -140,30 +140,37 @@ app.post("/api/invitations/:token/media", async (ctx) => {
 app.delete("/api/invitations/:token/media/:id", async (ctx) => {
   const tokenHash = await sha256(ctx.req.param("token"));
   const media = await withDb(ctx.env, async (db) => {
-    const row = await db.query<{ object_key: string }>(`
-      select rm.object_key
+    const row = await db.query<{ shopify_file_id: string | null; domain: string; access_token: string | null }>(`
+      select rm.shopify_file_id,s.domain,s.access_token
       from review_media rm
       join review_requests target on target.id=rm.review_request_id
       join review_requests source on source.shop_id=target.shop_id and source.shopify_order_id=target.shopify_order_id
+      join shops s on s.id=target.shop_id
       where source.token_hash=$1 and source.status in ('sent','submitted') and rm.id=$2 and rm.review_id is null`, [tokenHash, ctx.req.param("id")]);
     if (!row.rowCount) return null;
-    await db.query("delete from review_media where id=$1", [ctx.req.param("id")]);
     return row.rows[0];
   });
   if (!media) return ctx.json({ error: "Media upload not found." }, 404);
-  await ctx.env.REVIEW_MEDIA.delete(media.object_key);
+  await deleteShopifyReviewMedia(ctx.env, media.domain, media.access_token, [media.shopify_file_id]);
+  await withDb(ctx.env, (db) => db.query("delete from review_media where id=$1 and review_id is null", [ctx.req.param("id")]));
   return ctx.json({ ok: true });
 });
 
 app.get("/api/review-media/:id", async (ctx) => {
-  const media = await withDb(ctx.env, async (db) => db.query<{ object_key: string; content_type: string }>(`
-    select rm.object_key,rm.content_type from review_media rm
-    join reviews r on r.id=rm.review_id
+  const media = await withDb(ctx.env, async (db) => db.query<{ shopify_file_id: string | null; storage_url: string | null; domain: string; access_token: string | null }>(`
+    select rm.shopify_file_id,rm.storage_url,s.domain,s.access_token from review_media rm
+    join reviews r on r.id=rm.review_id join shops s on s.id=rm.shop_id
     where rm.id=$1 and r.status='published'`, [ctx.req.param("id")]));
   if (!media.rowCount) return ctx.text("Not found", 404);
-  const object = await ctx.env.REVIEW_MEDIA.get(media.rows[0].object_key);
-  if (!object) return ctx.text("Not found", 404);
-  return new Response(object.body, { headers: { "content-type": media.rows[0].content_type, "cache-control": "public, max-age=86400", etag: object.httpEtag } });
+  const current = media.rows[0];
+  let mediaUrl = current.storage_url;
+  if (!mediaUrl && current.shopify_file_id && current.access_token) {
+    const resolved = await resolveShopifyMediaUrl(ctx.env, current.domain, current.access_token, current.shopify_file_id);
+    mediaUrl = resolved?.storageUrl ?? null;
+    if (resolved) await withDb(ctx.env, (db) => db.query("update review_media set storage_url=$1,file_status=$2 where id=$3", [resolved.storageUrl, resolved.fileStatus, ctx.req.param("id")]));
+  }
+  if (!mediaUrl) return ctx.text("Media is still processing", 404);
+  return ctx.redirect(mediaUrl, 302);
 });
 
 app.post("/api/invitations/:token/reviews", async (ctx) => {
@@ -437,7 +444,7 @@ async function markWebhookProcessed(db: pg.Client, deliveryId: string) {
 async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, env: Env) {
   if (job.topic === "app/uninstalled") {
     await withDb(env, async (db) => {
-      const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [job.shopDomain]);
+      const shop = await db.query<{ id: string; access_token: string | null }>("select id,access_token from shops where domain=$1", [job.shopDomain]);
       if (shop.rowCount) {
         await cancelOutstandingRequests(db, shop.rows[0].id);
         await db.query("update shops set status='uninstalled',access_token=null,updated_at=now() where id=$1", [shop.rows[0].id]);
@@ -449,15 +456,18 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
 
   if (["customers/data_request", "customers/redact", "shop/redact"].includes(job.topic)) {
     await withDb(env, async (db) => {
-      const shop = await db.query<{ id: string }>("select id from shops where domain=$1", [job.shopDomain]);
+      const shop = await db.query<{ id: string; access_token: string | null }>("select id,access_token from shops where domain=$1", [job.shopDomain]);
       if (job.topic === "shop/redact") {
-        if (shop.rowCount) await deleteReviewMediaObjects(env.REVIEW_MEDIA, await eraseShopData(db, shop.rows[0].id));
+        if (shop.rowCount) {
+          const mediaIds = await eraseShopData(db, shop.rows[0].id);
+          await deleteShopifyReviewMedia(env, job.shopDomain, shop.rows[0].access_token, mediaIds);
+        }
         else await markWebhookProcessed(db, job.deliveryId);
         return;
       }
       if (shop.rowCount) {
         if (job.topic === "customers/data_request") await recordDataRequest(db, shop.rows[0].id);
-        else await deleteReviewMediaObjects(env.REVIEW_MEDIA, await redactCustomerData(db, shop.rows[0].id, job.payload));
+        else await deleteShopifyReviewMedia(env, job.shopDomain, shop.rows[0].access_token, await redactCustomerData(db, shop.rows[0].id, job.payload));
       }
       await markWebhookProcessed(db, job.deliveryId);
     });
@@ -483,4 +493,4 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     });
   }
 }
-export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); await removeExpiredReviewMedia(db,env.REVIEW_MEDIA); })); } };
+export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); await removeExpiredReviewMedia(db,env); })); } };
