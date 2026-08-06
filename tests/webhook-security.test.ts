@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { app } from "../src/worker";
 import { validWebhook } from "../src/services/shopify";
 import { hasRequiredShopifyWebhookHeaders, shouldQueueWebhook } from "../src/features/webhooks/security";
+import { MAX_QUEUE_ATTEMPTS, shouldRetryQueueMessage } from "../src/features/webhooks/queue-policy";
 
 const secret = "shopify-webhook-test-secret";
 
@@ -37,6 +38,16 @@ describe("Shopify webhook security", () => {
 
     await expect(validWebhook(missing, body, secret)).resolves.toBe(false);
     await expect(validWebhook(forged, body, secret)).resolves.toBe(false);
+  });
+
+  it("fails closed when the webhook secret is missing", async () => {
+    const body = "{}";
+    const request = new Request("https://example.com/webhooks/shopify", {
+      headers: { "x-shopify-hmac-sha256": await sign(body) },
+    });
+
+    await expect(validWebhook(request, body, "")).resolves.toBe(false);
+    await expect(validWebhook(request, body, undefined as never)).resolves.toBe(false);
   });
 
   it("returns 401 before parsing an invalid webhook payload", async () => {
@@ -113,5 +124,14 @@ describe("Shopify webhook security", () => {
     expect(shouldQueueWebhook(0)).toBe(false);
     expect(shouldQueueWebhook(null)).toBe(false);
     expect(shouldQueueWebhook(undefined)).toBe(false);
+  });
+
+  it("stops retrying a queue message at the configured final attempt", () => {
+    expect(MAX_QUEUE_ATTEMPTS).toBe(5);
+    expect(shouldRetryQueueMessage(0)).toBe(true);
+    expect(shouldRetryQueueMessage(4)).toBe(true);
+    expect(shouldRetryQueueMessage(5)).toBe(false);
+    expect(shouldRetryQueueMessage(6)).toBe(false);
+    expect(shouldRetryQueueMessage(Number.NaN)).toBe(false);
   });
 });

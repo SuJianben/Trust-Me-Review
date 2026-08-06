@@ -2,6 +2,7 @@ import { hmacHex, safeEqual } from "../lib/crypto";
 import type { Env } from "../types";
 
 export async function validWebhook(request: Request, body: string, secret: string) {
+  if (!secret?.trim()) return false;
   const given = request.headers.get("x-shopify-hmac-sha256") ?? "";
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));

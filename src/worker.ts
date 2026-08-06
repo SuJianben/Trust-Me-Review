@@ -20,6 +20,7 @@ import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettin
 import { randomToken, sha256, sha256Bytes } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
 import { hasRequiredShopifyWebhookHeaders, shouldQueueWebhook } from "./features/webhooks/security";
+import { shouldRetryQueueMessage } from "./features/webhooks/queue-policy";
 
 export const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
 app.onError((error, ctx) => {
@@ -573,4 +574,4 @@ async function processWebhook(job: Extract<QueueJob,{type:"shopify_webhook"}>, e
     });
   }
 }
-export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),message.attempts >= 5)); if(message.attempts >= 5) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); await removeExpiredReviewMedia(db,env); })); } };
+export default { fetch: app.fetch, async queue(batch: MessageBatch<QueueJob>, env: Env) { for(const message of batch.messages){ const job=message.body; try { if(job.type==="shopify_webhook") await processWebhook(job,env); else await withDb(env,(db)=>createTestDelivery(db,(job as Extract<QueueJob,{type:"send_test_request"}>).requestId,env.APP_URL,env.TOKEN_SECRET)); message.ack(); } catch(error) { console.error("queue_job_failed",{type:job.type,error:String(error)}); const finalAttempt = !shouldRetryQueueMessage(message.attempts); if(job.type === "send_test_request") await withDb(env,(db)=>recordTestDeliveryFailure(db,job.requestId,String(error),finalAttempt)); if(finalAttempt) message.ack(); else message.retry({delaySeconds:60}); } } }, async scheduled(_event:ScheduledEvent,env:Env,ctx:ExecutionContext){ ctx.waitUntil(withDb(env,async(db)=>{ for(const task of await queueDueRequests(db)) await env.REVIEW_QUEUE.send({type:"send_test_request",requestId:task.id}); await removeExpiredReviewMedia(db,env); })); } };
