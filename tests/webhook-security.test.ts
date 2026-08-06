@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../src/worker";
 import { validWebhook } from "../src/services/shopify";
-import { shouldQueueWebhook } from "../src/features/webhooks/security";
+import { hasRequiredShopifyWebhookHeaders, shouldQueueWebhook } from "../src/features/webhooks/security";
 
 const secret = "shopify-webhook-test-secret";
 
@@ -58,6 +58,54 @@ describe("Shopify webhook security", () => {
 
     expect(response.status).toBe(401);
     await expect(response.text()).resolves.toBe("Invalid HMAC");
+  });
+
+  it("rejects a correctly signed request when Shopify routing headers are missing", async () => {
+    const body = '{"id":123}';
+    const response = await app.request(
+      "https://example.com/webhooks/shopify",
+      {
+        method: "POST",
+        body,
+        headers: { "x-shopify-hmac-sha256": await sign(body) },
+      },
+      { SHOPIFY_API_SECRET: secret } as never,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.text()).resolves.toBe("Missing Shopify webhook headers");
+  });
+
+  it("returns 400 instead of throwing when a correctly signed payload is invalid JSON", async () => {
+    const body = "{ definitely-not-json";
+    const response = await app.request(
+      "https://example.com/webhooks/shopify",
+      {
+        method: "POST",
+        body,
+        headers: {
+          "x-shopify-hmac-sha256": await sign(body),
+          "x-shopify-webhook-id": "security-test-invalid-payload",
+          "x-shopify-topic": "customers/data_request",
+          "x-shopify-shop-domain": "trust-me-review-test.myshopify.com",
+        },
+      },
+      { SHOPIFY_API_SECRET: secret } as never,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.text()).resolves.toBe("Invalid JSON");
+  });
+
+  it("requires all three Shopify routing headers", () => {
+    const complete = new Headers({
+      "x-shopify-webhook-id": "delivery-1",
+      "x-shopify-topic": "orders/fulfilled",
+      "x-shopify-shop-domain": "trust-me-review-test.myshopify.com",
+    });
+    expect(hasRequiredShopifyWebhookHeaders(complete)).toBe(true);
+    complete.delete("x-shopify-webhook-id");
+    expect(hasRequiredShopifyWebhookHeaders(complete)).toBe(false);
   });
 
   it("does not enqueue a duplicate delivery", () => {
