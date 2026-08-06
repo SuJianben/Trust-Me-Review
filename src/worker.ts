@@ -139,7 +139,7 @@ app.post("/api/invitations/:token/media", async (ctx) => {
     const media = await withDb(ctx.env, async (db) => db.query<{ id: string }>(`
       insert into review_media(shop_id,review_request_id,object_key,storage_provider,shopify_file_id,storage_url,file_status,media_kind,content_type,byte_size,content_sha256)
       values($1,$2,$3,'shopify_files',$4,$5,$6,$7,$8,$9,$10)
-      on conflict (review_request_id,content_sha256) where review_id is null do nothing
+      on conflict (review_request_id,content_sha256) where review_id is null and content_sha256 is not null do nothing
       returning id`, [upload.shop_id, requestId, `shopify-file:${stored.shopifyFileId}`, stored.shopifyFileId, stored.storageUrl, stored.fileStatus, validation.kind, file.type, file.size, contentHash]));
     if (!media.rows[0]) {
       await deleteShopifyReviewMedia(ctx.env, upload.domain, upload.access_token, [stored.shopifyFileId]);
