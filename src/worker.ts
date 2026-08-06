@@ -19,8 +19,9 @@ import { toInvitationProducts } from "./features/requests/invitation-view-servic
 import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettings } from "./features/requests/scheduling-service";
 import { randomToken, sha256, sha256Bytes } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
+import { shouldQueueWebhook } from "./features/webhooks/security";
 
-const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
+export const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
 app.onError((error, ctx) => {
   console.error("request_failed", { method: ctx.req.method, path: new URL(ctx.req.url).pathname, error: error instanceof Error ? error.message : String(error) });
   return ctx.json({ error: "Internal server error" }, 500);
@@ -487,7 +488,7 @@ app.post("/api/admin/test-deliveries/:id/retry", async (ctx) => {
   return ctx.json({ queued: true });
 });
 
-app.post("/webhooks/shopify", async (ctx) => { const body=await ctx.req.text(); if (!(await validWebhook(ctx.req.raw,body,ctx.env.SHOPIFY_API_SECRET))) return ctx.text("Invalid HMAC",401); const deliveryId=ctx.req.header("x-shopify-webhook-id") ?? await sha256(`${ctx.req.header("x-shopify-topic")}:${body}`); const topic=ctx.req.header("x-shopify-topic") ?? "unknown"; const shopDomain=ctx.req.header("x-shopify-shop-domain") ?? ""; const payload=JSON.parse(body); const accepted=await withDb(ctx.env,async(db)=>{ const shop=await db.query<{id:string}>("select id from shops where domain=$1",[shopDomain]); const insert=await db.query("insert into webhook_events(shop_id,delivery_id,topic,payload) values($1,$2,$3,$4) on conflict(delivery_id) do nothing returning id",[shop.rows[0]?.id ?? null,deliveryId,topic,payload]); return Boolean(insert.rowCount); }); if(accepted) await ctx.env.REVIEW_QUEUE.send({type:"shopify_webhook",deliveryId,topic,shopDomain,payload}); return ctx.text("OK",200); });
+app.post("/webhooks/shopify", async (ctx) => { const body=await ctx.req.text(); if (!(await validWebhook(ctx.req.raw,body,ctx.env.SHOPIFY_API_SECRET))) return ctx.text("Invalid HMAC",401); const deliveryId=ctx.req.header("x-shopify-webhook-id") ?? await sha256(`${ctx.req.header("x-shopify-topic")}:${body}`); const topic=ctx.req.header("x-shopify-topic") ?? "unknown"; const shopDomain=ctx.req.header("x-shopify-shop-domain") ?? ""; const payload=JSON.parse(body); const accepted=await withDb(ctx.env,async(db)=>{ const shop=await db.query<{id:string}>("select id from shops where domain=$1",[shopDomain]); const insert=await db.query("insert into webhook_events(shop_id,delivery_id,topic,payload) values($1,$2,$3,$4) on conflict(delivery_id) do nothing returning id",[shop.rows[0]?.id ?? null,deliveryId,topic,payload]); return shouldQueueWebhook(insert.rowCount); }); if(accepted) await ctx.env.REVIEW_QUEUE.send({type:"shopify_webhook",deliveryId,topic,shopDomain,payload}); return ctx.text("OK",200); });
 app.get("*", (ctx) => ctx.env.ASSETS.fetch(ctx.req.raw));
 
 async function markWebhookProcessed(db: pg.Client, deliveryId: string) {
