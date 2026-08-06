@@ -17,7 +17,7 @@ import { createTestDelivery, queueDueRequests, recordTestDeliveryFailure, retryF
 import { groupTestDeliveryRows } from "./features/requests/delivery-view-service";
 import { toInvitationProducts } from "./features/requests/invitation-view-service";
 import { maskEmail, scheduleFulfilledOrderRequests, type RequestSchedulingSettings } from "./features/requests/scheduling-service";
-import { randomToken, sha256 } from "./lib/crypto";
+import { randomToken, sha256, sha256Bytes } from "./lib/crypto";
 import { cancelOutstandingRequests, eraseShopData, recordDataRequest, redactCustomerData } from "./features/privacy/service";
 
 const app = new Hono<{ Bindings: Env; Variables: { admin?: { shopDomain: string; userId: string; sessionToken: string } } }>();
@@ -113,6 +113,7 @@ app.post("/api/invitations/:token/media", async (ctx) => {
   if (typeof requestId !== "string" || !(file instanceof File)) return ctx.json({ error: "A product and file are required." }, 400);
   const validation = validateReviewMedia(file.type, file.size);
   if (!validation.ok) return ctx.json({ error: validation.error }, 400);
+  const contentHash = await sha256Bytes(await file.arrayBuffer());
   const tokenHash = await sha256(ctx.req.param("token"));
   const upload = await withDb(ctx.env, async (db) => {
     const request = await db.query<{ shop_id: string; domain: string; access_token: string | null }>(`
@@ -125,11 +126,33 @@ app.post("/api/invitations/:token/media", async (ctx) => {
   });
   if (!upload) return ctx.json({ error: "This product invitation is no longer available." }, 409);
   if (!upload.access_token) return ctx.json({ error: "Shopify Files access is unavailable. Reinstall the app to grant file permission." }, 409);
+  const existing = await withDb(ctx.env, async (db) => db.query<{ id: string; media_kind: "image" | "video" }>(`
+    select id,media_kind from review_media
+    where shop_id=$1 and review_request_id=$2 and content_sha256=$3 and review_id is null
+    limit 1`, [upload.shop_id, requestId, contentHash]));
+  if (existing.rows[0]) {
+    console.info("invitation_review_media_deduplicated", { requestId, kind: existing.rows[0].media_kind });
+    return ctx.json({ id: existing.rows[0].id, kind: existing.rows[0].media_kind });
+  }
   const stored = await uploadReviewMediaToShopifyFiles(ctx.env, { shopDomain: upload.domain, accessToken: upload.access_token, requestId, file, kind: validation.kind });
   try {
     const media = await withDb(ctx.env, async (db) => db.query<{ id: string }>(`
-      insert into review_media(shop_id,review_request_id,object_key,storage_provider,shopify_file_id,storage_url,file_status,media_kind,content_type,byte_size)
-      values($1,$2,$3,'shopify_files',$4,$5,$6,$7,$8,$9) returning id`, [upload.shop_id, requestId, `shopify-file:${stored.shopifyFileId}`, stored.shopifyFileId, stored.storageUrl, stored.fileStatus, validation.kind, file.type, file.size]));
+      insert into review_media(shop_id,review_request_id,object_key,storage_provider,shopify_file_id,storage_url,file_status,media_kind,content_type,byte_size,content_sha256)
+      values($1,$2,$3,'shopify_files',$4,$5,$6,$7,$8,$9,$10)
+      on conflict (review_request_id,content_sha256) where review_id is null do nothing
+      returning id`, [upload.shop_id, requestId, `shopify-file:${stored.shopifyFileId}`, stored.shopifyFileId, stored.storageUrl, stored.fileStatus, validation.kind, file.type, file.size, contentHash]));
+    if (!media.rows[0]) {
+      await deleteShopifyReviewMedia(ctx.env, upload.domain, upload.access_token, [stored.shopifyFileId]);
+      const duplicate = await withDb(ctx.env, async (db) => db.query<{ id: string; media_kind: "image" | "video" }>(`
+        select id,media_kind from review_media
+        where shop_id=$1 and review_request_id=$2 and content_sha256=$3 and review_id is null
+        limit 1`, [upload.shop_id, requestId, contentHash]));
+      if (duplicate.rows[0]) {
+        console.info("invitation_review_media_deduplicated", { requestId, kind: duplicate.rows[0].media_kind });
+        return ctx.json({ id: duplicate.rows[0].id, kind: duplicate.rows[0].media_kind });
+      }
+      throw new Error("MEDIA_DEDUPLICATION_FAILED");
+    }
     console.info("invitation_review_media_uploaded", { requestId, kind: validation.kind, byteSize: file.size });
     return ctx.json({ id: media.rows[0].id, kind: validation.kind }, 201);
   } catch (error) {

@@ -3,6 +3,10 @@ export async function sha256(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-256", encoder.encode(value));
   return [...new Uint8Array(bytes)].map((item) => item.toString(16).padStart(2, "0")).join("");
 }
+export async function sha256Bytes(value: ArrayBuffer): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", value);
+  return [...new Uint8Array(bytes)].map((item) => item.toString(16).padStart(2, "0")).join("");
+}
 export async function hmacHex(secret: string, value: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(value));
