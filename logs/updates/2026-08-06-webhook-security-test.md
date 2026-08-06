@@ -40,3 +40,12 @@
 - 本次未使用真实 Shopify 密钥发送合法 Webhook，因此没有触发真实店铺数据变更；线上合法投递仍需由 Shopify 实际发送来验证。
 - 本地已覆盖队列重试终止边界，以及隐私请求缺少邮箱时不删除数据；真实 Cloudflare Queue 重试和死信投递仍需在开发店验收阶段单独验证。
 - 已确认一个需要后续专门修复的可靠性风险：Webhook 记录写入数据库后，如果发送 Queue 瞬间失败，Shopify 重试可能因 `delivery_id` 幂等冲突而直接返回 200，导致事件没有再次入队。当前仅记录风险，尚未用线上破坏性操作验证，也未宣称已解决；后续应改为 outbox/可重入投递设计。
+
+## 2026-08-06 发布与线上健康检查
+
+- 已确认 Wrangler 登录账号和目标 Cloudflare 账号一致。
+- 已部署提交 `852f2b1 test: cover webhook retry and privacy edges`。
+- Worker 版本：`2caa8af9-8dd1-462d-b844-2d9b72f75550`。
+- 线上地址：`https://trust-me-review.guage5751.workers.dev`。
+- `GET /health` 返回 HTTP 200，响应为 `{"ok":true,"service":"trust-me-review"}`。
+- 尚未执行真实合法 Shopify Webhook；下一步需在开发店把一笔测试订单标记为已履约，再核对 Webhook 记录、队列消费和邀评任务。
