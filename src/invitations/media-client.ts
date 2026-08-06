@@ -5,6 +5,7 @@ export type LocalReviewMedia = {
   kind: ReviewMediaKind;
   fileName: string;
   previewUrl: string;
+  uploadState: "uploading" | "ready";
 };
 
 export async function compressReviewImage(file: File): Promise<File> {
